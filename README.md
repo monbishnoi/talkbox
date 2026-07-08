@@ -60,30 +60,20 @@ Voice rendering transforms agent output from readable to speakable: strips markd
 ## How It Works
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  YOUR AGENT (the brain)        TALKBOX (the boundary)               │
-│                                                                      │
-│  • Reasoning                   • Defines where the brain is          │
-│  • Memory                      • Injects persona into the voice      │
-│  • Tools                       • Renders text into speech            │
-│  • Task execution              • Wires the session                   │
-│                                                                      │
-│          ▲                              ▲                            │
-│          │ ask_agent                    │ session setup              │
-│          │ (facts, memory, tools)       │ (persona, boundary rules) │
-│          │                              │                            │
-│          ▼                              ▼                            │
-│                                                                      │
-│  SPEECH MODEL (the voice)                                           │
-│                                                                      │
-│  • Listening (VAD)                                                  │
-│  • Turn-taking                                                      │
-│  • Filler while agent thinks                                        │
-│  • Natural delivery                                                 │
-│  • Barge-in / interruption handling                                 │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
+┌───────────────────────┐       ┌───────────────────────────┐       ┌───────────────────────────┐
+│                       │       │                           │       │                           │
+│  🧠 YOUR AGENT        │       │  🔒 TALKBOX               │       │  🎙️ SPEECH MODEL           │
+│     (the brain)       │       │     (the boundary)        │       │     (the voice)           │
+│                       │       │                           │       │                           │
+│  • Reasoning          │       │  • Defines where the      │       │  • Listening (VAD)        │
+│  • Memory             │ ask_  │    brain is               │ sets  │  • Turn-taking            │
+│  • Tools              │ agent │  • Injects persona into   │  up   │  • Filler while agent     │
+│  • Task execution     │◄─────►│    the voice              │◄─────►│    thinks                 │
+│                       │       │  • Renders text into      │  the  │  • Natural delivery       │
+│                       │       │    speech                 │ call  │  • Barge-in /             │
+│                       │       │  • Wires the session      │       │    interruption handling   │
+│                       │       │                           │       │                           │
+└───────────────────────┘       └───────────────────────────┘       └───────────────────────────┘
 ```
 
 **What each layer owns:**
