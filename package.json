@@ -1,0 +1,42 @@
+{
+  "name": "talkbox",
+  "version": "0.1.0",
+  "description": "Open-source voice orchestrator that gives any AI agent a natural conversational voice.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Monika Bishnoi",
+  "homepage": "https://github.com/monbishnoi/talkbox#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/monbishnoi/talkbox.git"
+  },
+  "bugs": {
+    "url": "https://github.com/monbishnoi/talkbox/issues"
+  },
+  "keywords": [
+    "voice",
+    "agents",
+    "openai-realtime",
+    "orchestrator",
+    "speech-to-speech",
+    "ai-agent"
+  ],
+  "scripts": {
+    "start": "node src/orchestrator.js",
+    "voice:local": "node scripts/start-local-voice.js",
+    "benchmark": "node scripts/benchmark.js",
+    "doctor:providers": "node scripts/provider-doctor.js",
+    "experiment:matrix": "node scripts/run-provider-matrix.js",
+    "install:piper-lessac": "node scripts/install-piper-lessac.js",
+    "piper:start": "node scripts/start-piper-http.js",
+    "install:sherpa-en-20m": "node scripts/install-sherpa-en-20m.js",
+    "install:sherpa-kitten-en": "node scripts/install-sherpa-kitten-en.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "sherpa-onnx": "^1.13.3"
+  }
+}

@@ -1,0 +1,2012 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Talkbox | Voice for AI agents</title>
+    <style>
+      :root {
+        --ink: #111318;
+        --muted: #5b6472;
+        --line: #dfe4ea;
+        --soft: #f6f7f9;
+        --accent: #d71914;
+        --paper: #ffffff;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        line-height: 1.5;
+      }
+      main {
+        width: min(960px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 56px 0;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(3rem, 8vw, 6rem);
+        line-height: 0.95;
+        letter-spacing: -0.05em;
+      }
+      p { color: var(--muted); }
+      .panel {
+        margin-top: 28px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 24px;
+        background: white;
+      }
+      .section-kicker {
+        margin: 30px 0 8px;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 750;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+      }
+      .experiment-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+        min-height: 190px;
+        background: white;
+      }
+      .experiment-card[data-result="winner"] {
+        border-color: var(--ink);
+        box-shadow: inset 0 4px 0 var(--accent);
+      }
+      .experiment-card strong {
+        display: block;
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .experiment-card h2 {
+        margin: 8px 0 8px;
+        font-size: 1.05rem;
+        line-height: 1.2;
+      }
+      .experiment-card p {
+        margin: 0;
+        font-size: 0.92rem;
+      }
+      .experiment-card .metric-line {
+        margin-top: 12px;
+        color: var(--ink);
+        font-size: 0.86rem;
+        font-weight: 700;
+      }
+      .benchmark-table {
+        width: 100%;
+        margin-top: 16px;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      .benchmark-table th,
+      .benchmark-table td {
+        padding: 11px 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+      .benchmark-table th {
+        color: var(--muted);
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .benchmark-table tr:last-child td {
+        border-bottom: 0;
+      }
+      .verdict {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 9px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 750;
+        white-space: nowrap;
+      }
+      .verdict.win {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .status[data-state="listening"] .dot { background: #168a55; }
+      .status[data-state="thinking"] .dot { background: #d99000; }
+      .status[data-state="speaking"] .dot { background: var(--accent); }
+      button {
+        min-height: 52px;
+        border: 1px solid var(--ink);
+        background: var(--ink);
+        color: white;
+        padding: 0 22px;
+        font: inherit;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: white;
+        color: var(--ink);
+      }
+      textarea,
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        font: inherit;
+        background: white;
+        color: var(--ink);
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      .primary-action {
+        align-items: stretch;
+        margin-top: 18px;
+      }
+      .primary-action button {
+        min-width: 220px;
+        min-height: 64px;
+        font-size: 1.05rem;
+      }
+      details.advanced-panel {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px 16px;
+        background: var(--soft);
+      }
+      details.advanced-panel summary {
+        cursor: pointer;
+        font-weight: 700;
+      }
+      details.advanced-panel > *:not(summary) {
+        margin-top: 14px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 22px;
+      }
+      .box {
+        min-height: 180px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--soft);
+        white-space: pre-wrap;
+      }
+      .box h2 {
+        margin: 0 0 12px;
+        font-size: 0.78rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.92em;
+      }
+      .notice {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-left: 3px solid var(--accent);
+        background: #fff7f7;
+      }
+      .debug {
+        margin-top: 22px;
+      }
+      .debug-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .debug-stage {
+        min-height: 72px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: white;
+      }
+      .debug-stage strong {
+        display: block;
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .debug-stage span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+      .debug-stage[data-state="active"] { border-color: #d99000; }
+      .debug-stage[data-state="ok"] { border-color: #168a55; }
+      .debug-stage[data-state="error"] { border-color: var(--accent); }
+      .debug-log {
+        height: 220px;
+        overflow: auto;
+        margin-top: 14px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #111318;
+        color: #f6f7f9;
+        font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        white-space: pre-wrap;
+      }
+      .controls-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .single-field {
+        margin-top: 18px;
+      }
+      .is-hidden {
+        display: none !important;
+      }
+      .field label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 650;
+      }
+      .metrics {
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: var(--soft);
+      }
+      .metric strong {
+        display: block;
+        font-size: 0.72rem;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+      .metric span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .sample-bar {
+        margin-top: 14px;
+        border: 1px dashed var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        background: var(--soft);
+      }
+      .sample-meta {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.86rem;
+        word-break: break-word;
+      }
+      .split-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+        gap: 18px;
+        margin-top: 18px;
+      }
+      @media (max-width: 720px) {
+        .grid { grid-template-columns: 1fr; }
+        .evidence-grid { grid-template-columns: 1fr; }
+        .split-panel { grid-template-columns: 1fr; }
+        .controls-grid { grid-template-columns: 1fr; }
+        .metrics { grid-template-columns: 1fr 1fr; }
+        .debug-grid { grid-template-columns: 1fr 1fr; }
+        button { width: 100%; }
+        .benchmark-table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p><strong>Talk Box Runtime</strong></p>
+      <h1>Talk to your agent.</h1>
+      <p>
+        This page tests the thin Talkbox runtime: one clean user turn goes to your agent, the agent stays the brain,
+        and Talk Box speaks the result without inventing answers.
+      </p>
+
+      <p class="section-kicker">Experiment History</p>
+      <section class="evidence-grid" aria-label="Talk Box experiment history">
+        <article class="experiment-card">
+          <strong>Test 1</strong>
+          <h2>Hume EVI bridge</h2>
+          <p>Proved the adapter idea, but Hume owned too much turn-taking and voice output was inconsistent.</p>
+          <div class="metric-line">Decision: keep as adapter, not core.</div>
+        </article>
+        <article class="experiment-card">
+          <strong>Test 2</strong>
+          <h2>Provider-neutral runtime</h2>
+          <p>Created the swappable STT/TTS seam, provider doctor, benchmark matrix, and stage timings.</p>
+          <div class="metric-line">Runtime overhead: p50 3-6ms.</div>
+        </article>
+        <article class="experiment-card">
+          <strong>Test 3</strong>
+          <h2>Deepgram -> agent -> Piper</h2>
+          <p>Clean, measurable pipeline. Strong control, but batch flow left noticeable dead air.</p>
+          <div class="metric-line">Live baseline: 12.23s total.</div>
+        </article>
+        <article class="experiment-card" data-result="winner">
+          <strong>Test 4</strong>
+          <h2>Realtime voice brain + agent</h2>
+          <p>Realtime handled fillers, pacing, summaries, and drill-down while the backend agent stayed the source of truth.</p>
+          <div class="metric-line">Winner: best felt latency.</div>
+        </article>
+      </section>
+
+      <section class="panel" aria-label="Talk Box benchmark comparison">
+        <p class="section-kicker" style="margin-top:0;">Benchmark Comparison</p>
+        <table class="benchmark-table">
+          <thead>
+            <tr>
+              <th>Architecture</th>
+              <th>Measured Wait</th>
+              <th>Voice Behavior</th>
+              <th>Control</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Test 1:</strong> Hume EVI -> Talk Box -> agent</td>
+              <td>Unstable live path; output inconsistent</td>
+              <td>Natural voice provider, but partial turns and stale state leaked into the agent.</td>
+              <td>Low: provider owned too much of the loop.</td>
+              <td><span class="verdict">Adapter only</span></td>
+            </tr>
+            <tr>
+              <td><strong>Test 2:</strong> Provider-neutral runtime</td>
+              <td>Runtime p50 3-6ms; Piper p50 410ms; Sherpa p50 713ms</td>
+              <td>Excellent instrumentation; not a final conversational experience.</td>
+              <td>High: one clean completed turn, provider-swappable.</td>
+              <td><span class="verdict">Benchmark base</span></td>
+            </tr>
+            <tr>
+              <td><strong>Test 3:</strong> Deepgram STT -> agent -> Piper TTS</td>
+              <td>12,230ms total; STT 1,508ms; agent 10,380ms; TTS 340ms</td>
+              <td>Reliable but batchy. Spoken output was too literal/truncated for long agent answers.</td>
+              <td>Very high: the agent is the task brain, Talk Box is deterministic.</td>
+              <td><span class="verdict">Safe baseline</span></td>
+            </tr>
+            <tr>
+              <td><strong>Test 4:</strong> OpenAI Realtime voice brain -> agent</td>
+              <td>Agent tool p50 26,475ms across 7 successful calls</td>
+              <td>Best experience: graceful fillers, intelligent summaries, and follow-up drill-down.</td>
+              <td>High when bounded by <code>ask_agent</code>: the agent owns truth, memory, and tools.</td>
+              <td><span class="verdict win">Recommended</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="notice">
+          Key finding: raw backend latency and felt latency diverged. Test 4 waited longer for the agent,
+          but felt faster because the voice front layer kept the conversation alive while the agent worked.
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="status" data-state="idle" id="status">
+          <span class="dot"></span>
+          <span id="statusText">Runtime ready</span>
+        </div>
+
+        <div class="actions primary-action">
+          <button id="talkToCalButton">Start Talking</button>
+        </div>
+
+        <details class="advanced-panel">
+          <summary>Advanced test stack</summary>
+          <div class="field single-field">
+            <label for="runtimeTestMode">Test to run</label>
+            <select id="runtimeTestMode">
+              <option value="local">Test 3: Deepgram STT -> agent -> Piper TTS</option>
+              <option value="realtime">Test 4: OpenAI Realtime voice brain -> agent</option>
+              <option value="hume">Test 1: Hume EVI bridge -> agent</option>
+            </select>
+          </div>
+        </details>
+
+        <div class="controls-grid mode-local-only" id="localProviderControls">
+          <div class="field">
+            <label for="runtimeStt">Speech to text</label>
+            <select id="runtimeStt"></select>
+          </div>
+          <div class="field">
+            <label for="runtimeTts">Text to speech</label>
+            <select id="runtimeTts"></select>
+          </div>
+        </div>
+        <div class="field mode-local-only" id="localTextInput" style="margin-top: 16px;">
+          <label for="runtimeInput">Optional typed turn to send to your agent</label>
+          <textarea id="runtimeInput" placeholder="Speak with browser dictation, or type a test turn here."></textarea>
+        </div>
+
+        <details class="advanced-panel mode-local-only" id="localManualControls">
+          <summary>Manual local controls</summary>
+          <div class="actions">
+          <button id="dictateButton" class="secondary">Start Dictation</button>
+          <button id="recordSampleButton" class="secondary">Record Sample Only</button>
+          <button id="sendRuntimeButton" class="secondary">Send Loaded Turn</button>
+          <button id="stopSpeechButton" class="secondary">Stop Playback</button>
+          </div>
+          <div class="sample-bar">
+            <div class="actions">
+              <input id="audioFileInput" type="file" accept="audio/*" />
+              <button id="clearSampleButton" class="secondary" disabled>Clear Audio</button>
+              <a id="downloadSampleLink" class="button secondary" style="display:none;" download="talk-box-sample.wav">Download Sample</a>
+            </div>
+            <div class="sample-meta" id="sampleMeta">
+              No audio sample loaded. Record a WAV sample for Sherpa or Deepgram.
+            </div>
+          </div>
+        </details>
+        <div class="metrics" id="runtimeMetrics">
+          <div class="metric"><strong>Total</strong><span id="metric-total">-</span></div>
+          <div class="metric"><strong>STT</strong><span id="metric-stt">-</span></div>
+          <div class="metric"><strong>Agent</strong><span id="metric-cal">-</span></div>
+          <div class="metric"><strong>Render</strong><span id="metric-render">-</span></div>
+          <div class="metric"><strong>TTS</strong><span id="metric-tts">-</span></div>
+        </div>
+        <audio id="runtimeAudio" controls style="display:none; width:100%; margin-top:16px;"></audio>
+        <p class="notice">
+          Governing principle: Talk Box manages conversation mechanics. It does not invent, manipulate,
+          or complete task answers. Your agent remains the worker; Talk Box is the talker.
+        </p>
+      </section>
+
+      <details class="panel advanced-panel" id="realtimePanel">
+        <summary>Realtime details</summary>
+        <p><strong>Test 4: Realtime voice brain</strong></p>
+        <p>
+          OpenAI Realtime handles live voice mechanics. Your agent remains the identity, memory, personality,
+          and task brain through one controlled <code>ask_agent</code> tool.
+        </p>
+        <div class="status" data-state="idle" id="realtimeStatus">
+          <span class="dot"></span>
+          <span id="realtimeStatusText">Realtime ready</span>
+        </div>
+        <div class="actions">
+          <button id="connectRealtimeButton">Connect Realtime</button>
+          <button id="runRealtimeTextButton" class="secondary">Run Text Realtime Test</button>
+          <button id="disconnectRealtimeButton" class="secondary" disabled>Disconnect</button>
+        </div>
+        <div class="metrics">
+          <div class="metric"><strong>First audio</strong><span id="metric-realtime-first-audio">-</span></div>
+          <div class="metric"><strong>Agent tool</strong><span id="metric-realtime-cal">-</span></div>
+          <div class="metric"><strong>Events</strong><span id="metric-realtime-events">0</span></div>
+          <div class="metric"><strong>Model</strong><span id="metric-realtime-model">-</span></div>
+          <div class="metric"><strong>Voice</strong><span id="metric-realtime-voice">-</span></div>
+        </div>
+        <div class="split-panel">
+          <div class="box">
+            <h2>Voice brain said</h2>
+            <div id="realtimeSpoken">No Realtime response yet.</div>
+          </div>
+          <div class="box">
+            <h2>Full agent answer</h2>
+            <div id="realtimeCalAnswer">No agent tool call yet.</div>
+          </div>
+        </div>
+        <audio id="realtimeAudio" autoplay style="display:none;"></audio>
+        <p class="notice">
+          Boundary: the Realtime voice brain can acknowledge, pace, and summarize. It must call your agent for
+          substantive answers and must not invent project state, memory, or tool results.
+        </p>
+      </details>
+
+      <details class="panel advanced-panel" id="humePanel">
+        <summary>Hume details</summary>
+        <p><strong>Experimental Hume adapter</strong></p>
+        <p>
+          The Hume path remains available for compatibility testing, but it is no longer the core Talk Box runtime.
+        </p>
+        <div class="status" data-state="idle" id="humeStatus">
+          <span class="dot"></span>
+          <span id="humeStatusText">Connect Hume first</span>
+        </div>
+        <div class="actions">
+          <button id="connectButton">Connect Hume</button>
+          <button id="micButton" class="secondary" disabled title="Connect Hume before recording.">Connect Hume first</button>
+        </div>
+        <p class="notice">
+          Dev-only: this page reads local setup state from <code>/config</code> and mints a short-lived
+          Hume access token from <code>/hume-token</code>. Use <strong>Start Recording</strong>, speak one
+          complete thought, then send it to the agent.
+        </p>
+      </details>
+
+      <section class="grid">
+        <div class="box">
+          <h2>You said</h2>
+          <div id="transcript">No transcript yet.</div>
+        </div>
+        <div class="box">
+          <h2>Agent said</h2>
+          <div id="response">No response yet.</div>
+        </div>
+      </section>
+
+      <section class="panel debug">
+        <h2>Pipeline Debug</h2>
+        <div class="debug-grid">
+          <div class="debug-stage" id="stage-hume"><strong>Connection</strong><span>Waiting</span></div>
+          <div class="debug-stage" id="stage-mic"><strong>Mic / audio</strong><span>Waiting</span></div>
+          <div class="debug-stage" id="stage-transcript"><strong>Audio sent</strong><span>Waiting</span></div>
+          <div class="debug-stage" id="stage-cal"><strong>Agent connected</strong><span>Waiting</span></div>
+          <div class="debug-stage" id="stage-sse"><strong>Events</strong><span>Waiting</span></div>
+          <div class="debug-stage" id="stage-assistant"><strong>Voice text</strong><span>Waiting</span></div>
+          <div class="debug-stage" id="stage-audio"><strong>Voice generated</strong><span>Waiting</span></div>
+          <div class="debug-stage" id="stage-playback"><strong>Playback</strong><span>Waiting</span></div>
+        </div>
+        <div class="debug-log" id="debugLog">Debug events will appear here.</div>
+      </section>
+    </main>
+
+    <script type="module">
+      import {
+        EVIWebAudioPlayer,
+        HumeClient,
+        MimeType,
+        convertBlobToBase64,
+        ensureSingleValidAudioTrack,
+        getAudioStream,
+        getBrowserSupportedMimeType,
+      } from 'https://esm.sh/hume?bundle';
+
+      const status = document.getElementById('status');
+      const statusText = document.getElementById('statusText');
+      const humeStatus = document.getElementById('humeStatus');
+      const humeStatusText = document.getElementById('humeStatusText');
+      const connectButton = document.getElementById('connectButton');
+      const micButton = document.getElementById('micButton');
+      const runtimeTestMode = document.getElementById('runtimeTestMode');
+      const runtimeStt = document.getElementById('runtimeStt');
+      const runtimeTts = document.getElementById('runtimeTts');
+      const runtimeInput = document.getElementById('runtimeInput');
+      const talkToCalButton = document.getElementById('talkToCalButton');
+      const dictateButton = document.getElementById('dictateButton');
+      const recordSampleButton = document.getElementById('recordSampleButton');
+      const sendRuntimeButton = document.getElementById('sendRuntimeButton');
+      const stopSpeechButton = document.getElementById('stopSpeechButton');
+      const realtimeStatus = document.getElementById('realtimeStatus');
+      const realtimeStatusText = document.getElementById('realtimeStatusText');
+      const connectRealtimeButton = document.getElementById('connectRealtimeButton');
+      const runRealtimeTextButton = document.getElementById('runRealtimeTextButton');
+      const disconnectRealtimeButton = document.getElementById('disconnectRealtimeButton');
+      const realtimeAudio = document.getElementById('realtimeAudio');
+      const realtimeSpoken = document.getElementById('realtimeSpoken');
+      const realtimeCalAnswer = document.getElementById('realtimeCalAnswer');
+      const realtimeMetricFirstAudio = document.getElementById('metric-realtime-first-audio');
+      const realtimeMetricCal = document.getElementById('metric-realtime-cal');
+      const realtimeMetricEvents = document.getElementById('metric-realtime-events');
+      const realtimeMetricModel = document.getElementById('metric-realtime-model');
+      const realtimeMetricVoice = document.getElementById('metric-realtime-voice');
+      const audioFileInput = document.getElementById('audioFileInput');
+      const clearSampleButton = document.getElementById('clearSampleButton');
+      const downloadSampleLink = document.getElementById('downloadSampleLink');
+      const sampleMeta = document.getElementById('sampleMeta');
+      const runtimeAudio = document.getElementById('runtimeAudio');
+      const metrics = {
+        total: document.getElementById('metric-total'),
+        stt: document.getElementById('metric-stt'),
+        cal: document.getElementById('metric-cal'),
+        render: document.getElementById('metric-render'),
+        tts: document.getElementById('metric-tts'),
+      };
+      const transcript = document.getElementById('transcript');
+      const response = document.getElementById('response');
+      const debugLog = document.getElementById('debugLog');
+      const stages = {
+        hume: document.getElementById('stage-hume'),
+        mic: document.getElementById('stage-mic'),
+        transcript: document.getElementById('stage-transcript'),
+        cal: document.getElementById('stage-cal'),
+        sse: document.getElementById('stage-sse'),
+        assistant: document.getElementById('stage-assistant'),
+        audio: document.getElementById('stage-audio'),
+        playback: document.getElementById('stage-playback'),
+      };
+
+      let socket = null;
+      let player = null;
+      let playerReadyPromise = null;
+      let recorder = null;
+      let stream = null;
+      let connected = false;
+      let recording = false;
+      let recordedChunks = [];
+      let recordingMimeType = MimeType.WEBM;
+      let audioOutputCount = 0;
+      let assistantMessageCount = 0;
+      const pageLoadedAt = Date.now();
+      let debugStartedAt = Date.now();
+      let recognition = null;
+      let dictating = false;
+      let runtimeStream = null;
+      let runtimeRecording = false;
+      let runtimeAudioContext = null;
+      let runtimeAudioSource = null;
+      let runtimeAudioProcessor = null;
+      let runtimeSampleChunks = [];
+      let runtimeSampleFrameCount = 0;
+      let runtimeSampleRate = 0;
+      let runtimeSampleBlob = null;
+      let runtimeSampleUrl = '';
+      let runtimeSampleBase64 = '';
+      let runtimeSampleContentType = '';
+      let runtimeSampleExtension = '';
+      let runtimeSampleName = '';
+      let runtimeAutoSend = false;
+      let runtimeAutoSending = false;
+      let runtimeHeardSpeech = false;
+      let runtimeLastVoiceAt = 0;
+      let runtimeRecordingStartedAt = 0;
+      let realtimePeer = null;
+      let realtimeChannel = null;
+      let realtimeStream = null;
+      let realtimeTurnStartedAt = 0;
+      let realtimeFirstAudioMs = null;
+      let realtimeEventCount = 0;
+      let handledRealtimeToolCalls = new Set();
+      let pendingRealtimeToolArgs = new Map();
+
+      const testModeLabels = {
+        local: 'Test 3: local agent voice',
+        realtime: 'Test 4: Realtime voice brain',
+        hume: 'Test 1: Hume adapter',
+      };
+
+      function elapsed() {
+        return `${String(Date.now() - debugStartedAt).padStart(5, ' ')}ms`;
+      }
+
+      function formatDetail(detail = {}) {
+        const entries = Object.entries(detail)
+          .filter(([, value]) => value !== undefined && value !== null && value !== '')
+          .map(([key, value]) => `${key}=${typeof value === 'object' ? JSON.stringify(value) : value}`);
+        return entries.length ? ` ${entries.join(' ')}` : '';
+      }
+
+      function logDebug(stage, detail = {}) {
+        if (debugLog.textContent === 'Debug events will appear here.') debugLog.textContent = '';
+        debugLog.textContent += `[${elapsed()}] ${stage}${formatDetail(detail)}\n`;
+        debugLog.scrollTop = debugLog.scrollHeight;
+      }
+
+      function setStage(stage, state, text, detail = {}) {
+        const node = stages[stage];
+        if (!node) return;
+        node.dataset.state = state;
+        node.querySelector('span').textContent = text;
+        logDebug(`${stage}.${state}`, { text, ...detail });
+      }
+
+      function setStageText(stage, state, text) {
+        const node = stages[stage];
+        if (!node) return;
+        node.dataset.state = state;
+        node.querySelector('span').textContent = text;
+      }
+
+      function handleServerDebug(event) {
+        const { stage, detail = {}, requestId } = event;
+        if (event.timestamp && Date.parse(event.timestamp) < pageLoadedAt) {
+          logDebug(`server.replay.${stage}`, { requestId, ...detail });
+          return;
+        }
+        if (stage === 'talkbox.request.received') {
+          setStage('transcript', 'ok', `${detail.textLength || 0} chars`, { requestId, preview: detail.preview });
+          return;
+        }
+        if (stage === 'cal.request.started') {
+          setStage('cal', 'active', 'Request started', { requestId });
+          return;
+        }
+        if (stage === 'cal.response.received') {
+          setStage('cal', 'ok', `${detail.textLength || 0} chars in ${detail.elapsedMs}ms`, { requestId });
+          return;
+        }
+        if (stage === 'talkbox.sse.full_text_sent') {
+          setStage('sse', 'active', `Full text sent at ${detail.elapsedMs}ms`, {
+            requestId,
+            textLength: detail.textLength,
+          });
+          return;
+        }
+        if (stage === 'talkbox.sse.done') {
+          setStage('sse', 'ok', `${detail.mode || 'done'} in ${detail.elapsedMs}ms`, { requestId });
+          return;
+        }
+        if (stage === 'talkbox.error') {
+          setStage('cal', 'error', detail.message || 'Error', { requestId });
+          return;
+        }
+        if (stage === 'voice.turn.received') {
+          setStage('transcript', detail.hasAudio ? 'ok' : 'active', detail.hasAudio ? 'Audio received by Talk Box' : 'Text received by Talk Box', {
+            requestId,
+            sttProvider: detail.sttProvider,
+            ttsProvider: detail.ttsProvider,
+          });
+          return;
+        }
+        if (stage === 'turn.started') {
+          setStage('sse', 'active', 'Voice turn started', {
+            requestId,
+            sttProvider: detail.sttProvider,
+            ttsProvider: detail.ttsProvider,
+          });
+          return;
+        }
+        if (stage === 'voice.turn.error') {
+          setStage('cal', 'error', detail.message || 'Voice turn failed', { requestId });
+          setStatus('idle', detail.message || 'Voice turn failed');
+          return;
+        }
+        logDebug(`server.${stage}`, { requestId, ...detail });
+      }
+
+      function connectDebugEvents() {
+        const events = new EventSource('/debug/events');
+        events.onopen = () => logDebug('debug.events.connected');
+        events.onmessage = ({ data }) => {
+          try {
+            handleServerDebug(JSON.parse(data));
+          } catch (err) {
+            logDebug('debug.events.parse_error', { message: err.message });
+          }
+        };
+        events.onerror = () => logDebug('debug.events.disconnected');
+      }
+
+      connectDebugEvents();
+
+      function setStatus(state, text) {
+        status.dataset.state = state;
+        statusText.textContent = text;
+      }
+
+      function selectedTestMode() {
+        return runtimeTestMode.value || 'local';
+      }
+
+      function updatePrimaryButtonLabel() {
+        const mode = selectedTestMode();
+        if (mode === 'local') {
+          talkToCalButton.textContent = runtimeRecording ? 'Listening...' : 'Start Talking';
+          return;
+        }
+        if (mode === 'realtime') {
+          talkToCalButton.textContent = realtimePeer ? 'Stop Realtime' : 'Start Talking';
+          return;
+        }
+        if (mode === 'hume') {
+          talkToCalButton.textContent = recording ? 'Stop & Send to agent' : 'Start Talking';
+        }
+      }
+
+      function updateModeVisibility() {
+        const mode = selectedTestMode();
+        for (const node of document.querySelectorAll('.mode-local-only')) {
+          node.classList.toggle('is-hidden', mode !== 'local');
+        }
+        document.getElementById('realtimePanel').open = mode === 'realtime';
+        document.getElementById('humePanel').open = mode === 'hume';
+        updatePrimaryButtonLabel();
+        setStatus('idle', `${testModeLabels[mode]} ready`);
+      }
+
+      function setHumeStatus(state, text) {
+        humeStatus.dataset.state = state;
+        humeStatusText.textContent = text;
+      }
+
+      function setRealtimeStatus(state, text) {
+        realtimeStatus.dataset.state = state;
+        realtimeStatusText.textContent = text;
+      }
+
+      function formatMs(value) {
+        return Number.isFinite(value) ? `${value}ms` : '-';
+      }
+
+      function resetRealtimeMetrics() {
+        realtimeTurnStartedAt = Date.now();
+        realtimeFirstAudioMs = null;
+        realtimeEventCount = 0;
+        handledRealtimeToolCalls = new Set();
+        pendingRealtimeToolArgs = new Map();
+        realtimeMetricFirstAudio.textContent = '-';
+        realtimeMetricCal.textContent = '-';
+        realtimeMetricEvents.textContent = '0';
+        realtimeSpoken.textContent = '';
+        realtimeCalAnswer.textContent = 'Waiting for agent tool call...';
+      }
+
+      function setMetrics(timings = {}) {
+        metrics.total.textContent = formatMs(timings.totalMs);
+        metrics.stt.textContent = formatMs(timings.stt_finishedMs);
+        metrics.cal.textContent = formatMs(timings.cal_response_finishedMs);
+        metrics.render.textContent = formatMs(timings.voice_render_finishedMs);
+        metrics.tts.textContent = formatMs(timings.tts_finishedMs);
+      }
+
+      function populateProviderSelect(select, providers, preferred) {
+        select.textContent = '';
+        for (const provider of providers) {
+          const option = document.createElement('option');
+          option.value = provider.name;
+          option.textContent = provider.available ? provider.name : `${provider.name} (not configured)`;
+          option.disabled = !provider.available && !['browser', 'transcript', 'silent'].includes(provider.name);
+          option.title = provider.note || '';
+          select.append(option);
+        }
+        if ([...select.options].some((option) => option.value === preferred && !option.disabled)) {
+          select.value = preferred;
+        }
+      }
+
+      async function loadProviders() {
+        const res = await fetch('/providers', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Provider request failed: ${res.status}`);
+        const payload = await res.json();
+        populateProviderSelect(runtimeStt, payload.stt, payload.active?.sttProvider || 'browser');
+        populateProviderSelect(runtimeTts, payload.tts, payload.active?.ttsProvider || 'browser');
+        logDebug('runtime.providers.loaded', {
+          stt: runtimeStt.value,
+          tts: runtimeTts.value,
+        });
+      }
+
+      async function loadRuntimeConfig() {
+        const config = await loadConfig();
+        realtimeMetricModel.textContent = config.openaiRealtimeModel || '-';
+        realtimeMetricVoice.textContent = config.openaiRealtimeVoice || '-';
+        if (!config.openaiConfigured) {
+          setRealtimeStatus('idle', 'Missing OpenAI key');
+          connectRealtimeButton.disabled = true;
+        }
+        return config;
+      }
+
+      function speakInBrowser(text) {
+        if (!('speechSynthesis' in window)) {
+          setStage('playback', 'error', 'Browser speech unavailable');
+          return;
+        }
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.onstart = () => setStage('playback', 'ok', 'Browser speech started');
+        utterance.onend = () => setStage('playback', 'ok', 'Browser speech ended');
+        utterance.onerror = (event) => setStage('playback', 'error', event.error || 'Browser speech error');
+        window.speechSynthesis.speak(utterance);
+      }
+
+      function stopRuntimeSpeech() {
+        window.speechSynthesis?.cancel?.();
+        runtimeAudio.pause();
+        runtimeAudio.currentTime = 0;
+        player?.stop?.();
+        setStatus('idle', 'Speech stopped');
+        setStage('playback', 'ok', 'Stopped by user');
+      }
+
+      function closeRealtime() {
+        realtimeChannel?.close?.();
+        realtimePeer?.close?.();
+        for (const track of realtimeStream?.getTracks?.() || []) track.stop();
+        realtimeChannel = null;
+        realtimePeer = null;
+        realtimeStream = null;
+        connectRealtimeButton.disabled = false;
+        runRealtimeTextButton.disabled = false;
+        disconnectRealtimeButton.disabled = true;
+        setRealtimeStatus('idle', 'Realtime disconnected');
+        updatePrimaryButtonLabel();
+      }
+
+      function waitForRealtimeChannelOpen() {
+        if (realtimeChannel?.readyState === 'open') return Promise.resolve();
+        return new Promise((resolve, reject) => {
+          const timeout = window.setTimeout(() => reject(new Error('Realtime data channel did not open')), 10000);
+          realtimeChannel.addEventListener('open', () => {
+            window.clearTimeout(timeout);
+            resolve();
+          }, { once: true });
+          realtimeChannel.addEventListener('error', () => {
+            window.clearTimeout(timeout);
+            reject(new Error('Realtime data channel failed'));
+          }, { once: true });
+        });
+      }
+
+      function waitForIceGatheringComplete(peer, timeoutMs = 3000) {
+        if (peer.iceGatheringState === 'complete') return Promise.resolve();
+        return new Promise((resolve) => {
+          const timeout = window.setTimeout(resolve, timeoutMs);
+          const onStateChange = () => {
+            if (peer.iceGatheringState !== 'complete') return;
+            window.clearTimeout(timeout);
+            peer.removeEventListener('icegatheringstatechange', onStateChange);
+            resolve();
+          };
+          peer.addEventListener('icegatheringstatechange', onStateChange);
+        });
+      }
+
+      function withTimeout(promise, timeoutMs, message) {
+        return Promise.race([
+          promise,
+          new Promise((_, reject) => {
+            window.setTimeout(() => reject(new Error(message)), timeoutMs);
+          }),
+        ]);
+      }
+
+      function sendRealtimeEvent(event) {
+        if (!realtimeChannel || realtimeChannel.readyState !== 'open') {
+          throw new Error('Realtime data channel is not open');
+        }
+        realtimeChannel.send(JSON.stringify(event));
+      }
+
+      async function runAskAgentTool(call) {
+        const startedAt = Date.now();
+        setRealtimeStatus('thinking', 'Agent is thinking');
+        setStage('cal', 'active', 'Realtime ask_agent started');
+        let args = {};
+        try {
+          args = JSON.parse(call.arguments || '{}');
+        } catch (err) {
+          throw new Error(`Incomplete ask_agent arguments: ${err.message}`);
+        }
+        const request = String(args.request || '').trim();
+        if (!request) {
+          throw new Error('Incomplete ask_agent arguments: missing request');
+        }
+        const mode = String(args.mode || 'answer').trim();
+        const res = await fetch('/realtime/ask-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request, mode }),
+        });
+        const payload = await res.json().catch(() => ({}));
+        const elapsedMs = Date.now() - startedAt;
+        realtimeMetricCal.textContent = formatMs(payload.elapsedMs ?? elapsedMs);
+        if (!res.ok) {
+          realtimeCalAnswer.textContent = payload.error || `Agent failed: ${res.status}`;
+          throw new Error(payload.error || `Agent failed: ${res.status}`);
+        }
+        const agentText = payload.agentText || payload.calText || '';
+        realtimeCalAnswer.textContent = agentText;
+        response.textContent = agentText || response.textContent;
+        setStage('cal', 'ok', `Realtime agent done in ${payload.elapsedMs ?? elapsedMs}ms`);
+        return payload;
+      }
+
+      async function handleRealtimeFunctionCall(call) {
+        if (call.name !== 'ask_agent' && call.name !== 'ask_cal') return;
+        if (handledRealtimeToolCalls.has(call.call_id)) return;
+        handledRealtimeToolCalls.add(call.call_id);
+        try {
+          const result = await runAskAgentTool(call);
+          sendRealtimeEvent({
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: call.call_id,
+              output: JSON.stringify(result),
+            },
+          });
+          sendRealtimeEvent({
+            type: 'response.create',
+            response: {
+              instructions: 'Speak as the configured agent in first person. Use only the tool output. Do not say you are relaying, asking another brain, or talking to the agent. Mention that the full answer is visible in the UI only when helpful.',
+            },
+          });
+        } catch (err) {
+          sendRealtimeEvent({
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: call.call_id,
+              output: JSON.stringify({ ok: false, error: err.message }),
+            },
+          });
+          sendRealtimeEvent({
+            type: 'response.create',
+            response: {
+              instructions: 'Speak as the configured agent in first person. Say there is a voice pipe issue reaching your runtime, and ask the user to try again. Do not say another brain or agent could not be reached. Do not invent the answer.',
+            },
+          });
+        }
+      }
+
+      function appendRealtimeSpoken(text) {
+        if (!text) return;
+        if (realtimeSpoken.textContent === 'No Realtime response yet.') realtimeSpoken.textContent = '';
+        realtimeSpoken.textContent += text;
+      }
+
+      async function handleRealtimeEvent(event) {
+        realtimeEventCount += 1;
+        realtimeMetricEvents.textContent = String(realtimeEventCount);
+        setStageText('sse', 'ok', `${realtimeEventCount} Realtime events`);
+        logDebug(`realtime.${event.type}`, {
+          response: event.response_id,
+          item: event.item_id,
+        });
+        if (event.type === 'input_audio_buffer.speech_started') {
+          resetRealtimeMetrics();
+          setRealtimeStatus('listening', 'Listening');
+          setStage('mic', 'active', 'Realtime speech started');
+          return;
+        }
+        if (event.type === 'input_audio_buffer.speech_stopped') {
+          setRealtimeStatus('thinking', 'Thinking');
+          setStage('mic', 'ok', 'Realtime speech stopped');
+          setStage('transcript', 'ok', 'Audio sent to Realtime');
+          return;
+        }
+        if ((event.type === 'response.audio.delta' || event.type === 'response.output_audio.delta') && realtimeFirstAudioMs === null) {
+          realtimeFirstAudioMs = Date.now() - realtimeTurnStartedAt;
+          realtimeMetricFirstAudio.textContent = formatMs(realtimeFirstAudioMs);
+          setStage('audio', 'ok', `Realtime voice generated ${realtimeFirstAudioMs}ms`);
+          setStage('playback', 'ok', `Realtime first audio ${realtimeFirstAudioMs}ms`);
+          return;
+        }
+        if (
+          event.type === 'response.audio_transcript.delta' ||
+          event.type === 'response.output_audio_transcript.delta' ||
+          event.type === 'response.output_text.delta'
+        ) {
+          appendRealtimeSpoken(event.delta || '');
+          setStageText('assistant', 'ok', 'Realtime transcript flowing');
+          setRealtimeStatus('speaking', 'Realtime speaking');
+          return;
+        }
+        if (event.type === 'response.function_call_arguments.done') {
+          await handleRealtimeFunctionCall({
+            name: event.name,
+            call_id: event.call_id,
+            arguments: event.arguments || pendingRealtimeToolArgs.get(event.call_id) || '',
+          });
+          return;
+        }
+        if (event.type === 'response.function_call_arguments.delta') {
+          pendingRealtimeToolArgs.set(
+            event.call_id,
+            `${pendingRealtimeToolArgs.get(event.call_id) || ''}${event.delta || ''}`,
+          );
+          return;
+        }
+        if (event.type === 'response.output_item.done' && event.item?.type === 'function_call') {
+          logDebug('realtime.function_call.item_done_waiting_for_arguments', {
+            call_id: event.item.call_id,
+            name: event.item.name,
+          });
+          return;
+        }
+        if (event.type === 'response.done') {
+          setRealtimeStatus('idle', 'Realtime connected');
+        }
+      }
+
+      async function connectRealtime({ withMic = true } = {}) {
+        if (realtimePeer) closeRealtime();
+        resetRealtimeMetrics();
+        setRealtimeStatus('thinking', withMic ? 'Connecting Realtime' : 'Connecting Realtime text test');
+        connectRealtimeButton.disabled = true;
+        runRealtimeTextButton.disabled = true;
+        realtimePeer = new RTCPeerConnection();
+        realtimePeer.onconnectionstatechange = () => {
+          logDebug('realtime.peer.connection_state', { state: realtimePeer.connectionState });
+          if (['failed', 'disconnected', 'closed'].includes(realtimePeer.connectionState)) {
+            setRealtimeStatus('idle', `Realtime ${realtimePeer.connectionState}`);
+          }
+        };
+        realtimePeer.oniceconnectionstatechange = () => {
+          logDebug('realtime.peer.ice_state', { state: realtimePeer.iceConnectionState });
+        };
+        realtimePeer.onicegatheringstatechange = () => {
+          logDebug('realtime.peer.ice_gathering', { state: realtimePeer.iceGatheringState });
+        };
+        realtimePeer.ontrack = (event) => {
+          realtimeAudio.srcObject = event.streams[0];
+          realtimeAudio.play().catch((err) => {
+            setStage('playback', 'error', err.message || 'Realtime audio playback failed');
+          });
+        };
+        realtimeChannel = realtimePeer.createDataChannel('oai-events');
+        realtimeChannel.onopen = () => {
+          setRealtimeStatus('idle', 'Realtime connected');
+          disconnectRealtimeButton.disabled = false;
+          logDebug('realtime.data_channel.open');
+        };
+        realtimeChannel.onclose = () => logDebug('realtime.data_channel.closed');
+        realtimeChannel.onerror = (event) => {
+          setRealtimeStatus('idle', 'Realtime channel error');
+          logDebug('realtime.data_channel.error', { message: event.message || 'unknown' });
+        };
+        realtimeChannel.onmessage = async ({ data }) => {
+          try {
+            await handleRealtimeEvent(JSON.parse(data));
+          } catch (err) {
+            setRealtimeStatus('idle', `Realtime event error: ${err.message}`);
+            logDebug('realtime.event.error', { message: err.message });
+          }
+        };
+
+        if (withMic) {
+          realtimeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          for (const track of realtimeStream.getTracks()) realtimePeer.addTrack(track, realtimeStream);
+        } else {
+          realtimePeer.addTransceiver('audio', { direction: 'recvonly' });
+        }
+        const offer = await realtimePeer.createOffer();
+        await realtimePeer.setLocalDescription(offer);
+        logDebug('realtime.sdp.local_set');
+        await waitForIceGatheringComplete(realtimePeer);
+        logDebug('realtime.sdp.ice_ready', { state: realtimePeer.iceGatheringState });
+        const res = await fetch('/realtime/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/sdp' },
+          body: realtimePeer.localDescription.sdp,
+        });
+        const answer = await res.text();
+        if (!res.ok) throw new Error(answer);
+        logDebug('realtime.sdp.answer_received', { bytes: answer.length });
+        await withTimeout(
+          realtimePeer.setRemoteDescription({ type: 'answer', sdp: answer }),
+          10000,
+          'Realtime remote SDP timed out',
+        );
+        logDebug('realtime.sdp.remote_set');
+      }
+
+      async function runRealtimeTextTest() {
+        await connectRealtime({ withMic: false });
+        await waitForRealtimeChannelOpen();
+        resetRealtimeMetrics();
+        const prompt = 'Ask the configured agent for a concise status of the Talk Box Test 4 realtime voice-brain experiment. Then summarize the agent answer in voice with two bullets: current status and next step.';
+        transcript.textContent = prompt;
+        setRealtimeStatus('thinking', 'Realtime text test sent');
+        sendRealtimeEvent({
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: prompt }],
+          },
+        });
+        sendRealtimeEvent({
+          type: 'response.create',
+          response: {
+            instructions: 'This is a benchmark test. You must call ask_agent before answering. Then speak as the configured agent in first person using only the tool output. Do not describe yourself as relaying to the agent or asking another brain.',
+          },
+        });
+      }
+
+      function extensionForContentType(contentType, fallback = 'webm') {
+        if (contentType.includes('wav')) return 'wav';
+        if (contentType.includes('mpeg') || contentType.includes('mp3')) return 'mp3';
+        if (contentType.includes('ogg')) return 'ogg';
+        if (contentType.includes('webm')) return 'webm';
+        if (contentType.includes('mp4')) return 'mp4';
+        return fallback;
+      }
+
+      function blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => reject(reader.error || new Error('Could not read audio sample'));
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function clearRuntimeSample() {
+        if (runtimeSampleUrl) URL.revokeObjectURL(runtimeSampleUrl);
+        runtimeSampleBlob = null;
+        runtimeSampleUrl = '';
+        runtimeSampleBase64 = '';
+        runtimeSampleContentType = '';
+        runtimeSampleExtension = '';
+        runtimeSampleName = '';
+        runtimeSampleChunks = [];
+        runtimeSampleFrameCount = 0;
+        runtimeSampleRate = 0;
+        clearSampleButton.disabled = true;
+        downloadSampleLink.style.display = 'none';
+        downloadSampleLink.removeAttribute('href');
+        sampleMeta.textContent = 'No audio sample loaded. Record a WAV sample for Sherpa or Deepgram.';
+      }
+
+      async function setRuntimeSample(blob, name = 'talk-box-sample') {
+        clearRuntimeSample();
+        runtimeSampleBlob = blob;
+        runtimeSampleUrl = URL.createObjectURL(blob);
+        runtimeSampleBase64 = await blobToDataUrl(blob);
+        runtimeSampleContentType = blob.type || 'application/octet-stream';
+        runtimeSampleExtension = extensionForContentType(runtimeSampleContentType, name.split('.').pop() || 'webm');
+        runtimeSampleName = name;
+        clearSampleButton.disabled = false;
+        downloadSampleLink.style.display = 'inline-flex';
+        downloadSampleLink.href = runtimeSampleUrl;
+        downloadSampleLink.download = name.includes('.') ? name : `${name}.${runtimeSampleExtension}`;
+        sampleMeta.textContent = `${downloadSampleLink.download} loaded (${blob.size} bytes, ${runtimeSampleContentType || 'unknown type'}). WAV works with Sherpa and Deepgram; WebM/MP3 works with Deepgram.`;
+        setStage('mic', 'ok', 'Runtime audio sample ready', {
+          bytes: blob.size,
+          type: runtimeSampleContentType,
+        });
+      }
+
+      function encodeWav(samples, sampleRate) {
+        const bytesPerSample = 2;
+        const blockAlign = bytesPerSample;
+        const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+        const view = new DataView(buffer);
+
+        function writeString(offset, value) {
+          for (let i = 0; i < value.length; i += 1) {
+            view.setUint8(offset + i, value.charCodeAt(i));
+          }
+        }
+
+        writeString(0, 'RIFF');
+        view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * blockAlign, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, 16, true);
+        writeString(36, 'data');
+        view.setUint32(40, samples.length * bytesPerSample, true);
+
+        let offset = 44;
+        for (const sample of samples) {
+          const clamped = Math.max(-1, Math.min(1, sample));
+          view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+          offset += bytesPerSample;
+        }
+
+        return new Blob([buffer], { type: 'audio/wav' });
+      }
+
+      async function startRuntimeSampleRecording() {
+        runtimeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        runtimeSampleChunks = [];
+        runtimeSampleFrameCount = 0;
+        runtimeAutoSending = false;
+        runtimeHeardSpeech = false;
+        runtimeLastVoiceAt = 0;
+        runtimeRecordingStartedAt = Date.now();
+        runtimeAudioContext = new AudioContext();
+        runtimeSampleRate = runtimeAudioContext.sampleRate;
+        runtimeAudioSource = runtimeAudioContext.createMediaStreamSource(runtimeStream);
+        runtimeAudioProcessor = runtimeAudioContext.createScriptProcessor(4096, 1, 1);
+        runtimeAudioProcessor.onaudioprocess = (event) => {
+          if (!runtimeRecording) return;
+          const input = event.inputBuffer.getChannelData(0);
+          runtimeSampleChunks.push(new Float32Array(input));
+          runtimeSampleFrameCount += input.length;
+          let sumSquares = 0;
+          for (const sample of input) sumSquares += sample * sample;
+          const rms = Math.sqrt(sumSquares / input.length);
+          const now = Date.now();
+          if (rms > 0.015) {
+            runtimeHeardSpeech = true;
+            runtimeLastVoiceAt = now;
+          }
+          if (
+            runtimeAutoSend &&
+            runtimeHeardSpeech &&
+            !runtimeAutoSending &&
+            now - runtimeLastVoiceAt > 1200 &&
+            now - runtimeRecordingStartedAt > 1800
+          ) {
+            autoSendRuntimeTurn();
+          }
+          if (
+            runtimeAutoSend &&
+            !runtimeAutoSending &&
+            now - runtimeRecordingStartedAt > 15000
+          ) {
+            autoSendRuntimeTurn();
+          }
+          const output = event.outputBuffer.getChannelData(0);
+          output.fill(0);
+        };
+        runtimeAudioSource.connect(runtimeAudioProcessor);
+        runtimeAudioProcessor.connect(runtimeAudioContext.destination);
+        runtimeRecording = true;
+        recordSampleButton.textContent = 'Stop Sample';
+        updatePrimaryButtonLabel();
+        setStatus('listening', runtimeAutoSend ? 'Listening. I will send when you pause.' : 'Recording sample');
+        setStage('mic', 'active', 'Runtime WAV sample recording', { sampleRate: runtimeSampleRate });
+      }
+
+      function autoSendRuntimeTurn() {
+        if (runtimeAutoSending) return;
+            runtimeAutoSending = true;
+            setStatus('thinking', 'Pause detected. Sending to agent.');
+            window.setTimeout(async () => {
+              try {
+                await stopRuntimeSampleRecording();
+                await sendRuntimeTurn();
+              } catch (err) {
+                runtimeRecording = false;
+                runtimeAutoSending = false;
+                recordSampleButton.textContent = 'Record Sample';
+                updatePrimaryButtonLabel();
+                setStatus('idle', `Voice turn error: ${err.message}`);
+                setStage('mic', 'error', err.message || 'Voice turn failed');
+              }
+            }, 0);
+      }
+
+      async function stopRuntimeSampleRecording() {
+        runtimeRecording = false;
+        runtimeAutoSend = false;
+        runtimeAudioProcessor?.disconnect?.();
+        runtimeAudioSource?.disconnect?.();
+        await runtimeAudioContext?.close?.();
+        runtimeAudioProcessor = null;
+        runtimeAudioSource = null;
+        runtimeAudioContext = null;
+        for (const track of runtimeStream?.getTracks?.() || []) track.stop();
+        runtimeStream = null;
+        recordSampleButton.textContent = 'Record Sample';
+        updatePrimaryButtonLabel();
+        setStatus('idle', 'Runtime ready');
+        if (!runtimeSampleChunks.length) {
+          setStage('mic', 'error', 'No sample audio captured');
+          return;
+        }
+        const samples = new Float32Array(runtimeSampleFrameCount);
+        let offset = 0;
+        for (const chunk of runtimeSampleChunks) {
+          samples.set(chunk, offset);
+          offset += chunk.length;
+        }
+        await setRuntimeSample(encodeWav(samples, runtimeSampleRate), 'talk-box-sample.wav');
+      }
+
+      async function sendRuntimeTurn() {
+        const text = runtimeInput.value.trim();
+        const selectedStt = runtimeStt.value === 'browser' ? 'transcript' : runtimeStt.value;
+        const audioSttSelected = !['browser', 'transcript'].includes(runtimeStt.value);
+        const hasAudioSample = !!runtimeSampleBase64;
+        if (!text && !(audioSttSelected && hasAudioSample)) {
+          setStatus('idle', audioSttSelected ? 'Record or upload audio first' : 'Type or dictate a turn first');
+          return;
+        }
+        if (audioSttSelected && !hasAudioSample) {
+          setStatus('idle', 'Record or upload audio for selected STT');
+          return;
+        }
+
+        stopRuntimeSpeech();
+        setStatus('thinking', 'Sending to agent');
+        setStage('transcript', audioSttSelected ? 'active' : 'ok', audioSttSelected ? `Audio sample ${runtimeSampleExtension}` : `${text.length} chars`, {
+          preview: text.slice(0, 100),
+          sample: runtimeSampleName,
+        });
+        setStage('cal', 'active', 'Runtime request started');
+        setMetrics({});
+        transcript.textContent = audioSttSelected ? `Audio sample: ${runtimeSampleName || runtimeSampleExtension}` : text;
+        response.textContent = 'Waiting for agent...';
+
+        const selectedTts = runtimeTts.value;
+        const backendTts = selectedTts === 'browser' ? 'silent' : selectedTts;
+        const res = await fetch('/voice/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: text,
+            sttProvider: selectedStt,
+            ttsProvider: backendTts,
+            audioBase64: audioSttSelected ? runtimeSampleBase64 : undefined,
+            audioContentType: audioSttSelected ? runtimeSampleContentType : undefined,
+            audioExtension: audioSttSelected ? runtimeSampleExtension : undefined,
+            includeAudioBase64: selectedTts !== 'browser' && selectedTts !== 'silent',
+          }),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.error || `Voice turn failed: ${res.status}`);
+
+        response.textContent = payload.spoken || payload.calText || '';
+        transcript.textContent = payload.transcript || transcript.textContent;
+        setMetrics(payload.timings || {});
+        setStage('cal', 'ok', `Done in ${payload.timings?.cal_response_finishedMs ?? '?'}ms`);
+        setStage('assistant', 'ok', `${(payload.spoken || '').length} spoken chars`);
+        setStage('audio', 'ok', payload.audio ? `${payload.audio.provider} ${payload.audio.bytes} bytes` : 'No audio');
+        setStatus('speaking', 'Speaking');
+
+        if (payload.audio?.base64) {
+          runtimeAudio.style.display = 'block';
+          runtimeAudio.src = `data:${payload.audio.contentType};base64,${payload.audio.base64}`;
+          await runtimeAudio.play().catch((err) => {
+            setStage('playback', 'error', err.message || 'Audio playback failed');
+          });
+        } else if (selectedTts === 'browser' || selectedTts === 'silent') {
+          speakInBrowser(payload.spoken || '');
+        }
+      }
+
+      async function runLocalVoiceTurn() {
+        if (!runtimeRecording) {
+          clearRuntimeSample();
+          runtimeInput.value = '';
+          runtimeAutoSend = true;
+          await startRuntimeSampleRecording();
+          return;
+        }
+        runtimeAutoSend = false;
+        await stopRuntimeSampleRecording();
+        await sendRuntimeTurn();
+      }
+
+      async function runRealtimeVoiceTurn() {
+        if (realtimePeer) {
+          closeRealtime();
+          return;
+        }
+        setStage('hume', 'active', 'Opening Realtime');
+        await connectRealtime({ withMic: true });
+        setStage('hume', 'ok', 'Realtime connected');
+        setStatus('listening', 'Realtime listening');
+        updatePrimaryButtonLabel();
+      }
+
+      async function runHumeVoiceTurn() {
+        if (!connected) {
+          setStage('hume', 'active', 'Opening Hume');
+          setHumeStatus('thinking', 'Connecting');
+          await connectHume();
+          setHumeStatus('idle', 'Connected');
+          setStage('hume', 'ok', 'Hume connected');
+        }
+        if (recording) await stopMic();
+        else await startMic();
+        updatePrimaryButtonLabel();
+      }
+
+      async function talkToCal() {
+        const mode = selectedTestMode();
+        if (mode === 'realtime') {
+          await runRealtimeVoiceTurn();
+          return;
+        }
+        if (mode === 'hume') {
+          await runHumeVoiceTurn();
+          return;
+        }
+        await runLocalVoiceTurn();
+      }
+
+      function setupBrowserDictation() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          dictateButton.disabled = true;
+          dictateButton.textContent = 'Dictation unavailable';
+          return;
+        }
+
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+        recognition.onstart = () => {
+          dictating = true;
+          dictateButton.textContent = 'Stop Dictation';
+          setStatus('listening', 'Listening');
+          setStage('mic', 'active', 'Browser dictation listening');
+        };
+        recognition.onresult = (event) => {
+          let interim = '';
+          let finalText = '';
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const piece = event.results[i][0]?.transcript || '';
+            if (event.results[i].isFinal) finalText += piece;
+            else interim += piece;
+          }
+          const text = (finalText || interim).trim();
+          if (text) runtimeInput.value = text;
+          setStage('transcript', finalText ? 'ok' : 'active', finalText ? 'Final browser text' : 'Interim browser text');
+        };
+        recognition.onend = () => {
+          dictating = false;
+          dictateButton.textContent = 'Start Dictation';
+          setStatus('idle', 'Runtime ready');
+          setStage('mic', 'ok', 'Browser dictation ended');
+        };
+        recognition.onerror = (event) => {
+          dictating = false;
+          dictateButton.textContent = 'Start Dictation';
+          setStatus('idle', `Dictation error: ${event.error}`);
+          setStage('mic', 'error', event.error || 'Dictation error');
+        };
+      }
+
+      recordSampleButton.addEventListener('click', async () => {
+        try {
+          if (runtimeRecording) await stopRuntimeSampleRecording();
+          else await startRuntimeSampleRecording();
+        } catch (err) {
+          runtimeRecording = false;
+          recordSampleButton.textContent = 'Record Sample';
+          runtimeAudioProcessor?.disconnect?.();
+          runtimeAudioSource?.disconnect?.();
+          await runtimeAudioContext?.close?.();
+          runtimeAudioProcessor = null;
+          runtimeAudioSource = null;
+          runtimeAudioContext = null;
+          for (const track of runtimeStream?.getTracks?.() || []) track.stop();
+          runtimeStream = null;
+          setStatus('idle', `Sample error: ${err.message}`);
+          setStage('mic', 'error', err.message || 'Sample recording failed');
+        }
+      });
+
+      talkToCalButton.addEventListener('click', async () => {
+        try {
+          await talkToCal();
+        } catch (err) {
+          runtimeRecording = false;
+          recordSampleButton.textContent = 'Record Sample';
+          talkToCalButton.textContent = 'Start Talking';
+          runtimeAudioProcessor?.disconnect?.();
+          runtimeAudioSource?.disconnect?.();
+          await runtimeAudioContext?.close?.();
+          runtimeAudioProcessor = null;
+          runtimeAudioSource = null;
+          runtimeAudioContext = null;
+          for (const track of runtimeStream?.getTracks?.() || []) track.stop();
+          runtimeStream = null;
+          if (selectedTestMode() === 'realtime') {
+            setStatus('idle', `Realtime error: ${err.message}`);
+            setStage('mic', 'error', err.message || 'Realtime mic failed');
+          } else {
+            setStatus('idle', `Voice turn error: ${err.message}`);
+            setStage('mic', 'error', err.message || 'Voice turn failed');
+          }
+          updatePrimaryButtonLabel();
+        }
+      });
+
+      audioFileInput.addEventListener('change', async () => {
+        const file = audioFileInput.files?.[0];
+        if (!file) return;
+        try {
+          await setRuntimeSample(file, file.name || 'talk-box-upload');
+        } catch (err) {
+          setStage('mic', 'error', err.message || 'Audio upload failed');
+        }
+      });
+
+      clearSampleButton.addEventListener('click', () => {
+        clearRuntimeSample();
+        audioFileInput.value = '';
+      });
+
+      function setMicReady(isReady) {
+        micButton.disabled = !isReady;
+        micButton.textContent = isReady ? 'Start Recording' : 'Connect Hume first';
+        micButton.title = isReady ? 'Record one complete thought before sending it to the agent.' : 'Connect Hume before recording.';
+      }
+
+      function appendResponse(text) {
+        if (!text) return;
+        if (response.textContent === 'No response yet.') response.textContent = '';
+        response.textContent += text;
+      }
+
+      function resetTurnDisplay() {
+        response.textContent = '';
+        setStage('assistant', 'active', 'Waiting for response');
+        setStage('audio', 'active', 'Waiting for audio');
+        setStage('playback', 'active', 'Waiting for playback');
+      }
+
+      async function ensurePlayerReady() {
+        if (!player) player = createPlayer();
+        if (!playerReadyPromise) {
+          setStage('playback', 'active', 'Initializing player');
+          playerReadyPromise = player.init().catch((err) => {
+            playerReadyPromise = null;
+            setStage('playback', 'error', err.message || 'Player init failed');
+            throw err;
+          });
+        }
+        await playerReadyPromise;
+        setStage('playback', 'ok', 'Player ready');
+      }
+
+      function createPlayer() {
+        const nextPlayer = new EVIWebAudioPlayer({ disableAudioWorklet: true });
+        nextPlayer.on('play', (event) => {
+          setStage('playback', 'ok', 'Playing audio', { id: event.detail?.id });
+        });
+        nextPlayer.on('stop', (event) => {
+          setStage('playback', 'ok', 'Playback stopped', { id: event.detail?.id });
+        });
+        nextPlayer.on('error', (event) => {
+          setStage('playback', 'error', event.detail?.message || 'Playback error');
+        });
+        return nextPlayer;
+      }
+
+      async function handleMessage(message) {
+        try {
+          logDebug('hume.message', { type: message.type });
+          if (message.type === 'user_message') {
+            const text = message.message?.content || message.transcript || JSON.stringify(message, null, 2);
+            transcript.textContent = text;
+            if (player?.playing) player.stop();
+            setStage('transcript', 'ok', message.interim ? 'Interim user text' : 'Final user text', {
+              chars: text.length,
+              interim: message.interim,
+            });
+            setStatus(recording ? 'listening' : 'thinking', recording ? 'Recording' : 'Thinking');
+            return;
+          }
+
+          if (message.type === 'assistant_message') {
+            const text = message.message?.content || message.text || '';
+            assistantMessageCount += 1;
+            appendResponse(text);
+            setStage('assistant', 'ok', `${text.length} chars`, {
+              count: assistantMessageCount,
+              id: message.id || message.message?.id,
+            });
+            setStatus('speaking', 'Speaking');
+            return;
+          }
+
+          if (message.type === 'audio_output') {
+            audioOutputCount += 1;
+            setStage('audio', 'ok', `Audio output #${audioOutputCount}`, {
+              id: message.id,
+              index: message.index,
+              dataLength: message.data?.length,
+            });
+            await ensurePlayerReady();
+            await player?.enqueue(message);
+            setStage('playback', 'ok', 'Audio enqueued', {
+              id: message.id,
+              index: message.index,
+            });
+            setStatus('speaking', 'Speaking');
+            return;
+          }
+
+          if (message.type === 'user_interruption') {
+            player?.stop();
+            setStatus('listening', recording ? 'Recording' : 'Listening');
+            return;
+          }
+
+          if (message.type === 'assistant_end') {
+            setStatus(recording ? 'listening' : 'idle', recording ? 'Recording' : 'Connected');
+          }
+        } catch (err) {
+          const messageText = err.message || String(err);
+          console.error('Hume message handling failed', err);
+          setStage('playback', 'error', messageText);
+          setStatus('idle', `Error: ${messageText}`);
+        }
+      }
+
+      async function loadConfig() {
+        const res = await fetch('/config', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Config request failed: ${res.status}`);
+        return res.json();
+      }
+
+      async function loadHumeToken() {
+        const res = await fetch('/hume-token', { cache: 'no-store' });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.error || `Hume token request failed: ${res.status}`);
+        if (!payload.accessToken) throw new Error('Talk Box did not return a Hume access token');
+        return payload.accessToken;
+      }
+
+      async function connectHume() {
+        const config = await loadConfig();
+        if (!config.hasHumeApiKey || !config.hasHumeSecretKey || !config.humeConfigId) {
+          throw new Error('Missing HUME_API_KEY, HUME_SECRET_KEY, or HUME_CONFIG_ID in .env');
+        }
+
+        setStatus('thinking', 'Fetching Hume token');
+        setStage('hume', 'active', 'Fetching token');
+        const accessToken = await loadHumeToken();
+        setStatus('thinking', 'Opening Hume socket');
+        setStage('hume', 'active', 'Opening socket');
+        const client = new HumeClient({ accessToken });
+        socket = await client.empathicVoice.chat.connect({ configId: config.humeConfigId });
+        player = createPlayer();
+        socket.on('open', () => {
+          console.log('Hume socket opened');
+          setStage('hume', 'ok', 'Socket opened');
+        });
+        socket.on('message', handleMessage);
+        socket.on('error', (error) => {
+          console.error('Hume socket error', error);
+          setStage('hume', 'error', error.message || String(error));
+          setStatus('idle', `Error: ${error.message || error}`);
+        });
+        socket.on('close', (event) => {
+          const code = event?.code ? ` (${event.code})` : '';
+          const reason = event?.reason ? `: ${event.reason}` : '';
+          console.warn('Hume socket closed', event);
+          connected = false;
+          recording = false;
+          stopMic({ sendAudio: false });
+          player?.dispose();
+          player = null;
+          playerReadyPromise = null;
+          setMicReady(false);
+          connectButton.disabled = false;
+          setStage('hume', 'error', `Closed${code}${reason}`);
+          setStatus('idle', `Disconnected${code}${reason}`);
+        });
+
+          connected = true;
+        connectButton.disabled = true;
+        setMicReady(true);
+        setStatus('idle', 'Connected');
+        updatePrimaryButtonLabel();
+      }
+
+      async function startMic() {
+        if (!connected || !socket) return;
+
+        setStage('mic', 'active', 'Requesting access');
+        await ensurePlayerReady();
+        const mimeTypeResult = getBrowserSupportedMimeType();
+        const mimeType = mimeTypeResult.success ? mimeTypeResult.mimeType : MimeType.WEBM;
+        recordingMimeType = mimeType;
+        recordedChunks = [];
+        stream = await getAudioStream();
+        ensureSingleValidAudioTrack(stream);
+        setStage('mic', 'ok', `Stream ready (${mimeType})`);
+        recorder = new MediaRecorder(stream, { mimeType });
+        let audioChunkCount = 0;
+        recorder.ondataavailable = ({ data }) => {
+          if (!data.size) return;
+          recordedChunks.push(data);
+          audioChunkCount += 1;
+          if (audioChunkCount === 1 || audioChunkCount % 25 === 0) {
+            setStage('mic', 'ok', `${audioChunkCount} chunks captured`);
+          }
+        };
+        recorder.start(100);
+        recording = true;
+        micButton.textContent = 'Send to agent';
+        micButton.title = 'Stop recording and send this complete thought to the agent.';
+        setStatus('listening', 'Recording');
+        updatePrimaryButtonLabel();
+      }
+
+      function wait(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      async function stopRecorder() {
+        const activeRecorder = recorder;
+        recorder = null;
+
+        if (!activeRecorder || activeRecorder.state === 'inactive') return;
+        await new Promise((resolve) => {
+          let resolved = false;
+          const finish = () => {
+            if (resolved) return;
+            resolved = true;
+            resolve();
+          };
+          activeRecorder.addEventListener('stop', finish, { once: true });
+          window.setTimeout(finish, 1000);
+          try {
+            if (activeRecorder.state === 'recording') activeRecorder.requestData();
+            activeRecorder.stop();
+          } catch (err) {
+            setStage('mic', 'error', err.message || 'Recorder stop failed');
+            finish();
+          }
+        });
+      }
+
+      async function sendRecordedAudioToHume() {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          throw new Error('Hume socket is not open.');
+        }
+        if (!recordedChunks.length) {
+          throw new Error('No recorded audio was captured.');
+        }
+
+        const audioBlob = new Blob(recordedChunks, { type: recordingMimeType });
+        const encodedAudio = await convertBlobToBase64(audioBlob);
+        resetTurnDisplay();
+        socket.sendAudioInput({ data: encodedAudio });
+        setStage('mic', 'ok', 'Audio sent to Hume', {
+          chunks: recordedChunks.length,
+          bytes: audioBlob.size,
+          mimeType: recordingMimeType,
+        });
+        logDebug('hume.audio_input.sent', {
+          chunks: recordedChunks.length,
+          bytes: audioBlob.size,
+          mimeType: recordingMimeType,
+        });
+        recordedChunks = [];
+      }
+
+      async function stopMic({ sendAudio = true } = {}) {
+        const hadRecording = recording;
+        recording = false;
+        micButton.disabled = true;
+        micButton.textContent = sendAudio ? 'Sending to agent' : 'Start Recording';
+        setStage('mic', 'active', hadRecording ? 'Stopping recorder' : 'Stopping');
+
+        await stopRecorder();
+        recorder = null;
+        for (const track of stream?.getTracks?.() || []) track.stop();
+        stream = null;
+
+        if (sendAudio) {
+          setStage('mic', 'active', 'Sending audio to Hume');
+          await wait(100);
+          await sendRecordedAudioToHume();
+          setStatus('thinking', 'Sent to agent');
+        } else {
+          recordedChunks = [];
+          setStatus('idle', connected ? 'Connected' : 'Idle');
+        }
+
+        micButton.disabled = !connected;
+        micButton.textContent = connected ? 'Start Recording' : 'Connect Hume first';
+        micButton.title = connected ? 'Record one complete thought before sending it to the agent.' : 'Connect Hume before recording.';
+        updatePrimaryButtonLabel();
+      }
+
+      connectButton.addEventListener('click', async () => {
+        try {
+          setHumeStatus('thinking', 'Connecting');
+          await connectHume();
+        } catch (err) {
+          setMicReady(false);
+          setHumeStatus('idle', `Error: ${err.message}`);
+        }
+      });
+
+      micButton.addEventListener('click', async () => {
+        try {
+          if (recording) await stopMic();
+          else await startMic();
+        } catch (err) {
+          setStage('mic', 'error', err.message || 'Mic action failed');
+          setStatus('idle', `Error: ${err.message}`);
+          recording = false;
+          setMicReady(connected);
+          updatePrimaryButtonLabel();
+        }
+      });
+
+      dictateButton.addEventListener('click', () => {
+        if (!recognition) return;
+        if (dictating) recognition.stop();
+        else recognition.start();
+      });
+
+      sendRuntimeButton.addEventListener('click', async () => {
+        try {
+          sendRuntimeButton.disabled = true;
+          await sendRuntimeTurn();
+        } catch (err) {
+          setStatus('idle', `Error: ${err.message}`);
+          setStage('cal', 'error', err.message || 'Runtime turn failed');
+        } finally {
+          sendRuntimeButton.disabled = false;
+        }
+      });
+
+      stopSpeechButton.addEventListener('click', stopRuntimeSpeech);
+
+      runtimeTestMode.addEventListener('change', updateModeVisibility);
+
+      connectRealtimeButton.addEventListener('click', async () => {
+        try {
+          await connectRealtime({ withMic: true });
+        } catch (err) {
+          closeRealtime();
+          setRealtimeStatus('idle', `Realtime error: ${err.message}`);
+          logDebug('realtime.connect.error', { message: err.message });
+        }
+      });
+
+      runRealtimeTextButton.addEventListener('click', async () => {
+        try {
+          await runRealtimeTextTest();
+        } catch (err) {
+          closeRealtime();
+          setRealtimeStatus('idle', `Realtime text test error: ${err.message}`);
+          logDebug('realtime.text_test.error', { message: err.message });
+        }
+      });
+
+      disconnectRealtimeButton.addEventListener('click', closeRealtime);
+
+      setupBrowserDictation();
+      loadRuntimeConfig().catch((err) => {
+        setRealtimeStatus('idle', `Config failed: ${err.message}`);
+        logDebug('realtime.config.error', { message: err.message });
+      });
+      loadProviders().catch((err) => {
+        setStatus('idle', `Provider load failed: ${err.message}`);
+        logDebug('runtime.providers.error', { message: err.message });
+      });
+      updateModeVisibility();
+    </script>
+  </body>
+</html>

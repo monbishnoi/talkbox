@@ -1,0 +1,20 @@
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Dependencies and local runtimes
+node_modules/
+.venv/
+models/
+
+# Generated benchmark outputs
+benchmarks/*.json
+benchmarks/**/*.json
+benchmarks/latest-provider-matrix*.md
+benchmarks/provider-doctor*.md
+benchmarks/audio-artifacts/
+
+# Local system/log files
+.DS_Store
+npm-debug.log*
