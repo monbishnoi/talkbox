@@ -2,9 +2,13 @@
 
 Talkbox was shaped by four experiments.
 
+For measured results, baseline notes, and the reproducible benchmark matrix, see [Benchmark Assessment](../benchmarks/ASSESSMENT.md) and the curated baseline writeups in [benchmarks/baselines](../benchmarks/baselines/).
+
 ## Test 1: Hume EVI Bridge
 
 **Architecture:** Hume EVI -> Talkbox -> backend agent
+
+**Benchmark reference:** Covered in the architecture comparison in [Benchmark Assessment](../benchmarks/ASSESSMENT.md).
 
 **What worked:**
 
@@ -23,6 +27,8 @@ Talkbox was shaped by four experiments.
 
 **Architecture:** swappable STT/TTS adapters + benchmark instrumentation
 
+**Benchmark reference:** This test established the benchmark matrix documented in [Benchmark Assessment](../benchmarks/ASSESSMENT.md).
+
 **What worked:**
 
 - Provider-neutral interfaces worked.
@@ -34,6 +40,8 @@ Talkbox was shaped by four experiments.
 ## Test 3: Deepgram STT -> Agent -> Piper TTS
 
 **Architecture:** cloud speech-to-text, backend agent, local text-to-speech
+
+**Benchmark reference:** [Phase 1 local voice baseline](../benchmarks/baselines/2026-06-26-phase1-local-voice-baseline.md).
 
 **What worked:**
 
@@ -51,6 +59,8 @@ Talkbox was shaped by four experiments.
 ## Test 4: OpenAI Realtime -> `ask_agent` -> Agent
 
 **Architecture:** Realtime voice brain in front of the backend agent
+
+**Benchmark reference:** [OpenAI Realtime live POC](../benchmarks/baselines/2026-06-26-test4-openai-realtime-live-poc.md) and [OpenAI Realtime text probe](../benchmarks/baselines/2026-06-26-test4-openai-realtime-text-probe.md).
 
 **What worked:**
 

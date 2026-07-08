@@ -136,7 +136,7 @@ An early experiment that proved the adapter concept but revealed limitations. Hu
 
 ### Why OpenAI Realtime Won
 
-We evaluated multiple approaches. The key finding: raw latency and *felt* latency diverge. The batch path (STT → Agent → TTS) measured 12 seconds of dead silence. OpenAI Realtime took longer for the agent call (~26 seconds for complex queries), but felt faster because the speech model kept the conversation alive while the agent worked. See [Experiments](docs/experiments.md) for full findings.
+We evaluated multiple approaches. The key finding: raw latency and *felt* latency diverge. The batch path (STT → Agent → TTS) measured 12 seconds of dead silence. OpenAI Realtime took longer for the agent call (~26 seconds for complex queries), but felt faster because the speech model kept the conversation alive while the agent worked. See [Experiments](docs/experiments.md) for the experiment narrative and [Benchmarks](benchmarks/ASSESSMENT.md) for the measured baselines.
 
 ---
 
@@ -249,8 +249,16 @@ Beyond the core design, Talkbox provides developer tools:
 ## Docs
 
 - [Adapters](docs/adapters.md) — Writing custom adapters
-- [Experiments](docs/experiments.md) — What we tried and learned
+- [Experiments](docs/experiments.md) — What we tried and learned, including why OpenAI Realtime became the recommended path
+- [Benchmarks](benchmarks/ASSESSMENT.md) — Stage timing, baseline comparison, and reproducible matrix commands
+- [Baseline Notes](benchmarks/baselines/) — Curated notes for the Deepgram/Piper and OpenAI Realtime tests
 - [Coding Agent Guide](AGENTS.md) — Instructions for coding agents working on Talkbox
+
+---
+
+## Experiment Results
+
+Talkbox was built through four architecture tests. The short version is in [Experiments](docs/experiments.md); the measured baselines and reproducible benchmark commands are in [Benchmarks](benchmarks/ASSESSMENT.md). The OpenAI Realtime test is why Realtime is recommended: it handled perceived latency better by filling silence while the backend agent worked.
 
 ---
 
