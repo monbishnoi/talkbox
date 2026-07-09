@@ -99,11 +99,13 @@ function defaultSherpaTtsConfigJson() {
 export function getConfig() {
   loadEnv();
 
+  const inferredAgentAdapter = process.env.AGENT_ADAPTER ||
+    (process.env.CAL_ENDPOINT || process.env.CAL_VOICE_PERSONA_PATH ? 'cal' : 'http');
   const agentEndpoint = normalizeEndpoint(
-    process.env.AGENT_ENDPOINT,
-    process.env.AGENT_ADAPTER === 'cal' ? 'http://localhost:8080' : 'http://localhost:8080/chat',
+    process.env.AGENT_ENDPOINT || process.env.CAL_ENDPOINT,
+    inferredAgentAdapter === 'cal' ? 'http://localhost:8080' : 'http://localhost:8080/chat',
   );
-  const agentAdapter = process.env.AGENT_ADAPTER || 'http';
+  const agentAdapter = inferredAgentAdapter;
   const agentName = process.env.AGENT_NAME || (agentAdapter === 'cal' ? 'Cal' : 'Agent');
 
   const commandTtsCommand = process.env.COMMAND_TTS_COMMAND ||
@@ -131,8 +133,11 @@ export function getConfig() {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     openaiRealtimeModel: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime',
     openaiRealtimeVoice: process.env.OPENAI_REALTIME_VOICE || 'marin',
-    agentVoicePersonaPath: process.env.AGENT_VOICE_PERSONA_PATH || '',
-    agentVoicePersonaMaxChars: numberFromEnv('AGENT_VOICE_PERSONA_MAX_CHARS', 4500),
+    agentVoicePersonaPath: process.env.AGENT_VOICE_PERSONA_PATH || process.env.CAL_VOICE_PERSONA_PATH || '',
+    agentVoicePersonaMaxChars: numberFromEnv(
+      'AGENT_VOICE_PERSONA_MAX_CHARS',
+      numberFromEnv('CAL_VOICE_PERSONA_MAX_CHARS', 4500),
+    ),
     deepgramApiKey: process.env.DEEPGRAM_API_KEY || '',
     deepgramSttModel: process.env.DEEPGRAM_STT_MODEL || 'nova-3',
     deepgramTtsModel: process.env.DEEPGRAM_TTS_MODEL || 'aura-2-thalia-en',

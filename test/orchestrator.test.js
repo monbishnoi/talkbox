@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
+import { getConfig } from '../src/config.js';
 import { createTalkBoxServer, formatForVoice } from '../src/orchestrator.js';
 
 async function startServer(server) {
@@ -35,6 +36,43 @@ test('formatForVoice strips markdown that sounds bad in TTS', () => {
   assert.doesNotMatch(formatted, /\|/);
   assert.doesNotMatch(formatted, /`/);
   assert.doesNotMatch(formatted, /\*\*/);
+});
+
+test('config preserves legacy Cal environment aliases', () => {
+  const keys = [
+    'AGENT_ADAPTER',
+    'AGENT_ENDPOINT',
+    'AGENT_NAME',
+    'AGENT_VOICE_PERSONA_PATH',
+    'AGENT_VOICE_PERSONA_MAX_CHARS',
+    'CAL_ENDPOINT',
+    'CAL_VOICE_PERSONA_PATH',
+    'CAL_VOICE_PERSONA_MAX_CHARS',
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+
+  try {
+    for (const key of keys) delete process.env[key];
+    process.env.CAL_ENDPOINT = 'http://127.0.0.1:8080/';
+    process.env.CAL_VOICE_PERSONA_PATH = '/tmp/CAL.md';
+    process.env.CAL_VOICE_PERSONA_MAX_CHARS = '3200';
+
+    const config = getConfig();
+
+    assert.equal(config.agentAdapter, 'cal');
+    assert.equal(config.agentEndpoint, 'http://127.0.0.1:8080');
+    assert.equal(config.agentName, 'Cal');
+    assert.equal(config.agentVoicePersonaPath, '/tmp/CAL.md');
+    assert.equal(config.agentVoicePersonaMaxChars, 3200);
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previous[key];
+      }
+    }
+  }
 });
 
 test('orchestrator returns OpenAI SSE from a mocked generic agent response', async () => {
