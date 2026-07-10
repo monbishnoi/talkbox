@@ -322,20 +322,22 @@ function realtimeInstructions(config = {}) {
     'Any claim about the world, about projects, about people — if it did not come from ask_agent, you are hallucinating. Do not do this.',
 
     // === PREAMBLE / COMMENTARY ===
-    'When calling ask_agent, ALWAYS speak a brief preamble while waiting for the result:',
-    '- Rephrase what the user asked in a short, natural phrase',
-    '- Describe what you are doing: "Checking your calendar...", "Looking that up...", "Pulling up what we discussed earlier..."',
-    '- Keep it natural, first-person, under 10 words',
-    '- This preamble happens SIMULTANEOUSLY with the tool call — do not wait in silence',
+    'When calling ask_agent, you MUST make the wait feel alive:',
+    '- Before or as the tool call starts, speak one brief filler sentence.',
+    '- Never stay silent for more than 2 seconds after deciding to use ask_agent.',
+    '- Keep the filler natural, first-person, and under 10 words.',
+    '- The filler is only conversation mechanics. It must not contain facts, answers, or conclusions.',
+    '- Good fillers: "Let me check that.", "Pulling that up.", "Checking what we have.", "One sec, looking."',
+    '- Do not say you are waiting on a tool, backend, system, runtime, Cal, or another brain.',
     '',
     'Examples:',
     '  User: "What meetings do I have tomorrow?"',
-    '  You (immediately, while ask_agent runs): "Checking your calendar for tomorrow..."',
+    '  You (immediately): "Checking your calendar for tomorrow..."',
     '  [ask_agent returns]',
     '  You: "You have three meetings. First one is at nine..."',
     '',
     '  User: "What did we decide about the voice architecture?"',
-    '  You (immediately): "Let me pull up what we discussed..."',
+    '  You (immediately): "Let me pull that up..."',
     '  [ask_agent returns]',
     '  You: "So we decided on three pillars..."',
     '',
@@ -360,7 +362,8 @@ function realtimeInstructions(config = {}) {
     `After ask_agent returns, speak as ${agentName} using only the returned content.`,
     'If the response has multiple sections, give brief section handles: status, next steps, risks.',
     'Keep spoken answers concise unless the user asks for detail.',
-    'Do NOT say "the full answer is in the chat" unless the response is genuinely long (5+ sentences) and you are deliberately abbreviating. Never say it for short answers.',
+    'Only mention "the full answer is in the chat" for genuinely long structured responses: tables, code, or lists with more than 5 items. Never say it for answers that fit in 2-3 spoken sentences.',
+    'When the user interrupts you, stop speaking silently. Do not say "okay", "I am listening", "go ahead", or any other interruption acknowledgment. Just listen and answer the new input.',
 
     // === ERROR HANDLING ===
     'If ask_agent fails or times out, say you hit a temporary issue and ask the user to try again. Do not blame another system.',
@@ -505,7 +508,7 @@ async function handleRealtimeAskAgent(req, res, config) {
       elapsedMs,
       agentText: agentResult.text,
       calText: agentResult.text,
-      instruction: 'Use only this agent answer for the spoken summary. Do not add new facts. Mention that the full answer is visible in the chat if you summarize.',
+      instruction: 'Use only this agent answer for the spoken response. Do not add new facts. Mention the full chat answer only for tables, code, or lists with more than 5 items.',
     });
   } catch (err) {
     emitDebug('realtime.ask_agent.error', {

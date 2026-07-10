@@ -190,6 +190,30 @@
         min-height: 64px;
         font-size: 1.05rem;
       }
+      .voice-visualizer {
+        width: min(168px, 52vw);
+        height: 34px;
+        margin: 16px auto 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 8px 12px;
+        border: 1px solid rgba(17, 19, 24, 0.12);
+        border-radius: 999px;
+        background: var(--soft);
+      }
+      .voice-visualizer[hidden] {
+        display: none;
+      }
+      .voice-visualizer span {
+        width: 4px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--ink);
+        opacity: 0.45;
+        transition: height 0.08s linear, opacity 0.08s linear;
+      }
       details.advanced-panel {
         margin-top: 18px;
         border: 1px solid var(--line);
@@ -450,6 +474,10 @@
         <div class="actions primary-action">
           <button id="talkToCalButton">Start Talking</button>
         </div>
+        <div class="voice-visualizer" id="voiceVisualizer" hidden aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
 
         <details class="advanced-panel">
           <summary>Advanced test stack</summary>
@@ -621,6 +649,8 @@
       const runtimeTts = document.getElementById('runtimeTts');
       const runtimeInput = document.getElementById('runtimeInput');
       const talkToCalButton = document.getElementById('talkToCalButton');
+      const voiceVisualizer = document.getElementById('voiceVisualizer');
+      const voiceVisualizerBars = Array.from(voiceVisualizer.querySelectorAll('span'));
       const dictateButton = document.getElementById('dictateButton');
       const recordSampleButton = document.getElementById('recordSampleButton');
       const sendRuntimeButton = document.getElementById('sendRuntimeButton');
@@ -698,6 +728,10 @@
       let runtimeHeardSpeech = false;
       let runtimeLastVoiceAt = 0;
       let runtimeRecordingStartedAt = 0;
+      let visualizerContext = null;
+      let visualizerAnalyser = null;
+      let visualizerRaf = null;
+      let visualizerSource = null;
       let realtimePeer = null;
       let realtimeChannel = null;
       let realtimeStream = null;
@@ -706,6 +740,7 @@
       let realtimeEventCount = 0;
       let handledRealtimeToolCalls = new Set();
       let pendingRealtimeToolArgs = new Map();
+      let queuedRealtimeToolCall = null;
 
       const testModeLabels = {
         local: 'Test 3: local agent voice',
@@ -872,6 +907,7 @@
         realtimeEventCount = 0;
         handledRealtimeToolCalls = new Set();
         pendingRealtimeToolArgs = new Map();
+        queuedRealtimeToolCall = null;
         realtimeMetricFirstAudio.textContent = '-';
         realtimeMetricCal.textContent = '-';
         realtimeMetricEvents.textContent = '0';
@@ -947,13 +983,91 @@
         setStage('playback', 'ok', 'Stopped by user');
       }
 
+      function resetVoiceVisualizerBars() {
+        for (const bar of voiceVisualizerBars) {
+          bar.style.height = '7px';
+          bar.style.opacity = '0.45';
+        }
+      }
+
+      function stopVoiceVisualizer() {
+        if (visualizerRaf) cancelAnimationFrame(visualizerRaf);
+        visualizerRaf = null;
+        visualizerSource?.disconnect?.();
+        visualizerAnalyser?.disconnect?.();
+        visualizerSource = null;
+        visualizerAnalyser = null;
+        visualizerContext?.close?.();
+        visualizerContext = null;
+        voiceVisualizer.hidden = true;
+        resetVoiceVisualizerBars();
+      }
+
+      function startVoiceVisualizer(inputStream) {
+        stopVoiceVisualizer();
+        if (!inputStream) return;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        visualizerContext = new AudioContextClass();
+        visualizerSource = visualizerContext.createMediaStreamSource(inputStream);
+        visualizerAnalyser = visualizerContext.createAnalyser();
+        visualizerAnalyser.fftSize = 512;
+        visualizerSource.connect(visualizerAnalyser);
+        const data = new Uint8Array(visualizerAnalyser.fftSize);
+        const smoothedHeights = new Array(voiceVisualizerBars.length).fill(7);
+        let phase = 0;
+        voiceVisualizer.hidden = false;
+
+        const draw = () => {
+          if (!visualizerAnalyser) return;
+          visualizerAnalyser.getByteTimeDomainData(data);
+          const bucketSize = Math.max(1, Math.floor(data.length / voiceVisualizerBars.length));
+          let totalSquares = 0;
+          for (const value of data) {
+            const centered = (value - 128) / 128;
+            totalSquares += centered * centered;
+          }
+          const overallRms = Math.sqrt(totalSquares / data.length);
+          phase += 0.24 + overallRms * 3;
+
+          for (let i = 0; i < voiceVisualizerBars.length; i += 1) {
+            let sumSquares = 0;
+            let peak = 0;
+            for (let j = 0; j < bucketSize; j += 1) {
+              const centered = ((data[i * bucketSize + j] || 128) - 128) / 128;
+              const magnitude = Math.abs(centered);
+              sumSquares += centered * centered;
+              peak = Math.max(peak, magnitude);
+            }
+            const bucketRms = Math.sqrt(sumSquares / bucketSize);
+            const position = voiceVisualizerBars.length <= 1 ? 0 : i / (voiceVisualizerBars.length - 1);
+            const envelope = 0.58 + Math.sin(position * Math.PI) * 0.42;
+            const motion = 1
+              + Math.sin(phase + i * 0.95) * 0.18
+              + Math.cos(phase * 0.7 + i * 1.45) * 0.1;
+            const level = Math.min(1, Math.max(bucketRms * 6.4, peak * 2.5, overallRms * 0.9) * envelope * motion);
+            const targetHeight = Math.max(7, Math.round(7 + level * 20));
+            smoothedHeights[i] = smoothedHeights[i] * 0.62 + targetHeight * 0.38;
+            const height = Math.round(smoothedHeights[i]);
+            voiceVisualizerBars[i].style.height = `${height}px`;
+            voiceVisualizerBars[i].style.opacity = String(Math.max(0.45, Math.min(1, 0.45 + level * 0.55)));
+          }
+          visualizerRaf = requestAnimationFrame(draw);
+        };
+
+        draw();
+      }
+
       function closeRealtime() {
         realtimeChannel?.close?.();
         realtimePeer?.close?.();
         for (const track of realtimeStream?.getTracks?.() || []) track.stop();
+        stopVoiceVisualizer();
         realtimeChannel = null;
         realtimePeer = null;
         realtimeStream = null;
+        queuedRealtimeToolCall = null;
         connectRealtimeButton.disabled = false;
         runRealtimeTextButton.disabled = false;
         disconnectRealtimeButton.disabled = true;
@@ -1006,6 +1120,29 @@
         realtimeChannel.send(JSON.stringify(event));
       }
 
+      function requestRealtimePreamble(request, mode) {
+        if (!realtimeChannel || realtimeChannel.readyState !== 'open') return;
+        const safeRequest = request.length > 180 ? `${request.slice(0, 180)}...` : request;
+        sendRealtimeEvent({
+          type: 'response.create',
+          response: {
+            modalities: ['audio', 'text'],
+            tool_choice: 'none',
+            instructions: [
+              'Say exactly one short filler sentence before the agent answer is ready.',
+              'This is conversation mechanics only, not the answer.',
+              'Do not include facts, conclusions, or details.',
+              'Do not say you are using a tool, backend, runtime, Cal, or another brain.',
+              'Do not say "okay, I am listening" or "go ahead".',
+              'Keep it under 10 words, like "Let me check that." or "Pulling that up."',
+              `User request mode: ${mode}.`,
+              `User request: ${safeRequest}`,
+            ].join(' '),
+          },
+        });
+        setStage('assistant', 'active', 'Realtime preamble requested');
+      }
+
       async function runAskAgentTool(call) {
         const startedAt = Date.now();
         setRealtimeStatus('thinking', 'Agent is thinking');
@@ -1021,6 +1158,7 @@
           throw new Error('Incomplete ask_agent arguments: missing request');
         }
         const mode = String(args.mode || 'answer').trim();
+        requestRealtimePreamble(request, mode);
         const res = await fetch('/realtime/ask-agent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1057,7 +1195,7 @@
           sendRealtimeEvent({
             type: 'response.create',
             response: {
-              instructions: 'Speak as the configured agent in first person. Use only the tool output. Do not say you are relaying, asking another brain, or talking to the agent. Mention that the full answer is visible in the UI only when helpful.',
+              instructions: 'Speak as the configured agent in first person. Use only the tool output for facts. Keep the spoken response concise unless the user asked for detail. Mention that the full answer is visible in the UI only for tables, code, or lists with more than 5 items. Do not say you are relaying, asking another brain, or talking to the agent.',
             },
           });
         } catch (err) {
@@ -1072,10 +1210,23 @@
           sendRealtimeEvent({
             type: 'response.create',
             response: {
-              instructions: 'Speak as the configured agent in first person. Say there is a voice pipe issue reaching your runtime, and ask the user to try again. Do not say another brain or agent could not be reached. Do not invent the answer.',
+              instructions: 'Speak as the configured agent in first person. In one short sentence, say there is a temporary voice pipe issue and ask the user to try again. Do not say another brain or agent could not be reached. Do not invent the answer.',
             },
           });
         }
+      }
+
+      function queueRealtimeFunctionCall(call) {
+        queuedRealtimeToolCall = call;
+        setStage('cal', 'active', 'Realtime ask_agent queued');
+      }
+
+      async function drainQueuedRealtimeFunctionCall() {
+        if (!queuedRealtimeToolCall) return false;
+        const call = queuedRealtimeToolCall;
+        queuedRealtimeToolCall = null;
+        await handleRealtimeFunctionCall(call);
+        return true;
       }
 
       function appendRealtimeSpoken(text) {
@@ -1122,7 +1273,7 @@
           return;
         }
         if (event.type === 'response.function_call_arguments.done') {
-          await handleRealtimeFunctionCall({
+          queueRealtimeFunctionCall({
             name: event.name,
             call_id: event.call_id,
             arguments: event.arguments || pendingRealtimeToolArgs.get(event.call_id) || '',
@@ -1144,6 +1295,7 @@
           return;
         }
         if (event.type === 'response.done') {
+          if (await drainQueuedRealtimeFunctionCall()) return;
           setRealtimeStatus('idle', 'Realtime connected');
         }
       }
@@ -1195,6 +1347,7 @@
 
         if (withMic) {
           realtimeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          startVoiceVisualizer(realtimeStream);
           for (const track of realtimeStream.getTracks()) realtimePeer.addTrack(track, realtimeStream);
         } else {
           realtimePeer.addTransceiver('audio', { direction: 'recvonly' });
@@ -1238,7 +1391,7 @@
         sendRealtimeEvent({
           type: 'response.create',
           response: {
-            instructions: 'This is a benchmark test. You must call ask_agent before answering. Then speak as the configured agent in first person using only the tool output. Do not describe yourself as relaying to the agent or asking another brain.',
+            instructions: 'This is a benchmark test. You must call ask_agent before answering. Before the tool result arrives, speak one brief filler sentence. Then speak as the configured agent in first person using only the tool output. Do not describe yourself as relaying to the agent or asking another brain.',
           },
         });
       }
@@ -1335,6 +1488,7 @@
 
       async function startRuntimeSampleRecording() {
         runtimeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        startVoiceVisualizer(runtimeStream);
         runtimeSampleChunks = [];
         runtimeSampleFrameCount = 0;
         runtimeAutoSending = false;
@@ -1416,6 +1570,7 @@
         runtimeAudioContext = null;
         for (const track of runtimeStream?.getTracks?.() || []) track.stop();
         runtimeStream = null;
+        stopVoiceVisualizer();
         recordSampleButton.textContent = 'Record Sample';
         updatePrimaryButtonLabel();
         setStatus('idle', 'Runtime ready');

@@ -264,6 +264,20 @@ test('browser UI exposes provider-neutral runtime controls', async () => {
   assert.match(html, /id="runtimeTts"/);
   assert.match(html, /id="runtimeInput"/);
   assert.match(html, /id="talkToCalButton"/);
+  assert.match(html, /id="voiceVisualizer"/);
+  assert.match(html, /\.voice-visualizer \{/);
+  assert.match(html, /width: min\(168px, 52vw\);/);
+  assert.match(html, /margin: 16px auto 0;/);
+  assert.match(html, /startVoiceVisualizer\(realtimeStream\);/);
+  assert.match(html, /startVoiceVisualizer\(runtimeStream\);/);
+  assert.match(html, /requestRealtimePreamble\(request, mode\);/);
+  assert.match(html, /queueRealtimeFunctionCall/);
+  assert.match(html, /drainQueuedRealtimeFunctionCall/);
+  assert.match(html, /if \(await drainQueuedRealtimeFunctionCall\(\)\) return;/);
+  assert.match(html, /tool_choice: 'none'/);
+  assert.match(html, /Keep the spoken response concise unless the user asked for detail/);
+  assert.match(html, /tables, code, or lists with more than 5 items/);
+  assert.match(html, /Do not say "okay, I am listening" or "go ahead"/);
   assert.match(html, /Start Talking/);
   assert.match(html, /agent/);
   assert.match(html, /Experiment History/);
@@ -284,4 +298,22 @@ test('browser UI exposes provider-neutral runtime controls', async () => {
   assert.match(html, /\/realtime\/session/);
   assert.match(html, /\/realtime\/ask-agent/);
   assert.match(html, /Experimental Hume adapter/);
+});
+
+test('Realtime voice instructions enforce filler, chat mention bounds, and silent interruption', async () => {
+  const source = await readFile(new URL('../src/orchestrator.js', import.meta.url), 'utf8');
+  const persona = await readFile(new URL('../personas/cal-voice.md', import.meta.url), 'utf8');
+
+  assert.match(source, /Never stay silent for more than 2 seconds/);
+  assert.match(source, /Keep spoken answers concise unless the user asks for detail/);
+  assert.match(source, /tables, code, or lists with more than 5 items/);
+  assert.match(source, /stop speaking silently/);
+  assert.doesNotMatch(source, /You are NOT a text-to-speech reader/);
+  assert.doesNotMatch(source, /Do not read it word-for-word/);
+  assert.doesNotMatch(source, /Default spoken length: 2-3 sentences/);
+  assert.doesNotMatch(source, /Mention that the full answer is visible in the chat if you summarize/);
+
+  assert.match(persona, /stop silently/);
+  assert.match(persona, /unless the response is a table, code, or a list with more than five items/);
+  assert.doesNotMatch(persona, /Not a reader/);
 });
