@@ -10,6 +10,14 @@ Talkbox sits between a speech model and your agent. The speech model handles the
 
 ---
 
+## Architecture Flow
+
+Explore the interactive [Talkbox architecture flow](https://monbishnoi.github.io/talkbox/): voice connection, session hydration, live `ask_agent` work, and progress narration.
+
+It shows the core contract in one sentence: **your agent owns the brain, OpenAI Realtime owns the voice, and Talkbox brings them to life.**
+
+---
+
 ## Core Design
 
 Talkbox contributes three things that you'd otherwise have to figure out yourself:
