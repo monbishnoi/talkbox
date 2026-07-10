@@ -133,6 +133,8 @@ export function getConfig() {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     openaiRealtimeModel: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime',
     openaiRealtimeVoice: process.env.OPENAI_REALTIME_VOICE || 'marin',
+    progressNarrationEnabled: process.env.PROGRESS_NARRATION_ENABLED !== '0',
+    progressNarrationStyle: process.env.PROGRESS_NARRATION_STYLE || 'calm-commentator',
     agentVoicePersonaPath: process.env.AGENT_VOICE_PERSONA_PATH || process.env.CAL_VOICE_PERSONA_PATH || '',
     agentVoicePersonaMaxChars: numberFromEnv(
       'AGENT_VOICE_PERSONA_MAX_CHARS',

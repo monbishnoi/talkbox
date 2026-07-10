@@ -12,6 +12,7 @@ import { describeTtsProviders } from './adapters/tts/index.js';
 import { runVoiceTurn } from './runtime/voice-session.js';
 import { formatForVoice } from './runtime/voice-renderer.js';
 import { loadAgentPersona } from './runtime/agent-persona.js';
+import { buildProgressNarrationInstruction } from './runtime/progress-narrator.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..');
@@ -519,6 +520,30 @@ async function handleRealtimeAskAgent(req, res, config) {
   }
 }
 
+async function handleRealtimeProgress(req, res, config) {
+  if (!isAuthorized(req, config)) {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return;
+  }
+
+  let body;
+  try {
+    body = await readJson(req);
+  } catch {
+    sendJson(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  const result = buildProgressNarrationInstruction(body, config);
+  emitDebug('realtime.progress.narration', {
+    shouldNarrate: !!result.shouldNarrate,
+    style: result.style || config.progressNarrationStyle,
+    activity: result.activity || null,
+    reason: result.reason || null,
+  }, body.turnId || null);
+  sendJson(res, 200, result);
+}
+
 function serveStatic(req, res, pathname) {
   const safePath = pathname === '/' ? '/index.html' : pathname;
   const filePath = join(PUBLIC_DIR, safePath);
@@ -576,6 +601,8 @@ export function createTalkBoxServer(config = getConfig()) {
         openaiConfigured: !!config.openaiApiKey,
         openaiRealtimeModel: config.openaiRealtimeModel,
         openaiRealtimeVoice: config.openaiRealtimeVoice,
+        progressNarrationEnabled: config.progressNarrationEnabled,
+        progressNarrationStyle: config.progressNarrationStyle,
         agentAdapter: config.agentAdapter,
         agentName: config.agentName,
         agentEndpoint: config.agentEndpoint,
@@ -624,6 +651,11 @@ export function createTalkBoxServer(config = getConfig()) {
 
     if ((url.pathname === '/realtime/ask-agent' || url.pathname === '/realtime/ask-cal') && req.method === 'POST') {
       await handleRealtimeAskAgent(req, res, config);
+      return;
+    }
+
+    if (url.pathname === '/realtime/progress' && req.method === 'POST') {
+      await handleRealtimeProgress(req, res, config);
       return;
     }
 

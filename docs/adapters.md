@@ -95,6 +95,29 @@ See `src/adapters/voice/interface.js`.
 | Deepgram + Piper | Baseline | Good instrumentation and provider-neutral testing. |
 | Hume EVI | Experimental | Kept because it was Test 1 and may be useful for emotion-aware experiments. |
 
+## Progress Events
+
+If your renderer can observe agent activity while a request is in flight, it can ask Talkbox to produce Realtime narration instructions:
+
+```http
+POST /realtime/progress
+```
+
+Example body:
+
+```json
+{
+  "event": {
+    "kind": "step_started",
+    "tool": "search",
+    "description": "Search project notes for the deployment plan"
+  },
+  "recentActivities": []
+}
+```
+
+Talkbox returns `{ "shouldNarrate": true, "instructions": "..." }`. Forward those instructions to the OpenAI Realtime data channel with `response.create`. Keep this as narration only; do not use progress events as a substitute for the final `ask_agent` answer.
+
 ## Writing A New Adapter
 
 Start by copying the closest existing adapter and keep the boundary small:

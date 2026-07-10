@@ -55,6 +55,20 @@ AI agents think in markdown. Tables, code blocks, bullet lists, headers. None of
 
 Voice rendering transforms agent output from readable to speakable: strips markdown formatting, translates visual symbols into words, and selects a concise spoken summary (3-6 sentences) from longer responses. Section headings become follow-up prompts ("I can go deeper on X, Y, Z."). The full agent response remains available in the chat for reading.
 
+### 4. Progress Narration
+
+Long-running agents often stream useful activity events while they work: searching files, checking memory, running tests, calling tools. Talkbox can turn those renderer-provided events into natural progress narration for OpenAI Realtime.
+
+The goal is not robotic play-by-play. Talkbox tells the voice model to act like a calm game commentator: synthesize the action into a vivid, useful update, skip vague/repetitive events, and never say "tool call", "backend", or "bash" to the user.
+
+```http
+POST /realtime/progress
+```
+
+Send a normalized activity event and Talkbox returns Realtime instructions your renderer can forward over the voice data channel.
+
+This is separate from the speech model's immediate filler. Realtime can say a quick "Let me check that" as the `ask_agent` call begins. `/realtime/progress` is for the longer wait after your agent starts streaming activity events.
+
 ---
 
 ## How It Works
@@ -71,7 +85,8 @@ Voice rendering transforms agent output from readable to speakable: strips markd
 │  • Task execution     │◄─────►│    the voice              │◄─────►│    thinks                 │
 │                       │       │  • Renders text into      │  the  │  • Natural delivery       │
 │                       │       │    speech                 │ call  │  • Barge-in /             │
-│                       │       │  • Wires the session      │       │    interruption handling   │
+│                       │       │  • Narrates progress      │       │    interruption handling   │
+│                       │       │  • Wires the session      │       │                           │
 │                       │       │                           │       │                           │
 └───────────────────────┘       └───────────────────────────┘       └───────────────────────────┘
 ```
@@ -81,8 +96,19 @@ Voice rendering transforms agent output from readable to speakable: strips markd
 | Layer | Owns | Does NOT own |
 |-------|------|--------------|
 | Your agent | Facts, memory, tools, reasoning, personality | Voice, listening, speaking |
-| Talkbox | Boundary enforcement, persona injection, voice rendering, session wiring | Reasoning, voice generation, turn-taking |
-| Speech model | Natural conversation, filler, barge-in, delivery, VAD | Facts, memory, tools, identity |
+| Talkbox | Boundary enforcement, persona injection, voice rendering, progress narration policy, session wiring | Reasoning, audio generation, VAD |
+| Speech model | Natural conversation, immediate filler, barge-in, delivery, VAD | Facts, memory, tools, identity |
+
+### Preamble vs Progress Narration
+
+Talkbox uses two different mechanisms to make long agent work feel natural:
+
+| Mechanism | Who performs it | What it does |
+|---|---|---|
+| Immediate preamble | OpenAI Realtime speech model | Says one brief filler line when it starts `ask_agent`, such as "Let me check that." |
+| Progress narration | Talkbox `/realtime/progress` + OpenAI Realtime | Converts your renderer's agent activity events into natural commentary while the agent is still working. |
+
+In other words: Realtime owns the live speaking mechanics. Talkbox owns the rules, boundary, persona, rendering, and narration policy. Your backend agent owns the truth.
 
 ---
 
@@ -229,6 +255,7 @@ Beyond the core design, Talkbox provides developer tools:
 
 - **Session wiring** — Handles WebRTC/SDP negotiation, data channel setup, and tool call routing so you don't have to build the real-time plumbing yourself
 - **Provider abstraction** — Swap STT/TTS providers in the batch path without changing agent code
+- **Progress narration endpoint** — Normalize renderer-provided agent events into OpenAI Realtime instructions for natural "what's happening" commentary during long waits
 - **Latency tracking** — Measures each stage (STT, agent, render, TTS) with millisecond precision
 - **Detail cache** — Stores full agent responses so the chat shows complete answers while voice summarizes
 - **Debug pipeline** — Real-time SSE event stream showing every stage as it happens

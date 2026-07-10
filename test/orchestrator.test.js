@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { getConfig } from '../src/config.js';
 import { createTalkBoxServer, formatForVoice } from '../src/orchestrator.js';
+import { buildProgressNarrationInstruction } from '../src/runtime/progress-narrator.js';
 
 async function startServer(server) {
   server.listen(0, '127.0.0.1');
@@ -256,6 +257,66 @@ test('voice turn endpoint runs provider-neutral path with timings', async () => 
   }
 });
 
+test('progress narrator builds calm commentator realtime instructions', () => {
+  const result = buildProgressNarrationInstruction({
+    event: {
+      tool: 'bash',
+      description: 'Search local files for "maybeNarrateVoiceStep"',
+      inputSummary: { commandPreview: 'rg -n "maybeNarrateVoiceStep" clients/pwa/index.html' },
+    },
+    recentActivities: [
+      { description: 'Run the test suite' },
+      { description: 'Check service health' },
+    ],
+  }, {
+    agentName: 'Cal',
+    progressNarrationStyle: 'calm-commentator',
+  });
+
+  assert.equal(result.shouldNarrate, true);
+  assert.equal(result.activity.description, 'Search local files for "maybeNarrateVoiceStep"');
+  assert.match(result.instructions, /calm game commentator/);
+  assert.match(result.instructions, /Paint a quick mental picture/);
+  assert.match(result.instructions, /Current activity: Search local files/);
+  assert.match(result.instructions, /Recent activity context: Run the test suite \| Check service health/);
+  assert.doesNotMatch(result.instructions, /Say exactly this brief progress update/);
+  assert.doesNotMatch(result.instructions, /I’m running a shell check/);
+});
+
+test('Realtime progress endpoint returns reusable narration policy', async () => {
+  const talkBoxServer = createTalkBoxServer({
+    agentEndpoint: 'http://127.0.0.1:1/chat',
+    agentAdapter: 'http',
+    agentName: 'TestAgent',
+    progressNarrationEnabled: true,
+    progressNarrationStyle: 'calm-commentator',
+    talkBoxApiKey: '',
+  });
+  const talkBoxEndpoint = await startServer(talkBoxServer);
+
+  try {
+    const response = await fetch(`${talkBoxEndpoint}/realtime/progress`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: {
+          tool: 'calendar_read',
+          description: 'Calendar read: tomorrow',
+        },
+      }),
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.ok, true);
+    assert.equal(payload.shouldNarrate, true);
+    assert.match(payload.instructions, /TestAgent/);
+    assert.match(payload.instructions, /calm game commentator/);
+    assert.match(payload.instructions, /Calendar read: tomorrow/);
+  } finally {
+    talkBoxServer.close();
+  }
+});
+
 test('browser UI exposes provider-neutral runtime controls', async () => {
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 
@@ -297,6 +358,7 @@ test('browser UI exposes provider-neutral runtime controls', async () => {
   assert.match(html, /id="realtimeCalAnswer"/);
   assert.match(html, /\/realtime\/session/);
   assert.match(html, /\/realtime\/ask-agent/);
+  assert.match(html, /\/realtime\/progress/);
   assert.match(html, /Experimental Hume adapter/);
 });
 

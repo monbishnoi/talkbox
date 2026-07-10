@@ -23,6 +23,7 @@ The voice layer may manage conversation mechanics:
 - filler while the backend works
 - barge-in
 - spoken summarization
+- progress narration from renderer-provided activity events
 - drill-down on prior answers
 
 The voice layer must not invent task answers. Substantive answers come from the backend agent through one boundary tool: `ask_agent`.
@@ -80,6 +81,16 @@ The recommended path is OpenAI Realtime as the voice brain:
 
 - Realtime handles live audio, pacing, fillers, and barge-in.
 - Talkbox exposes `ask_agent`.
+- Talkbox exposes `/realtime/progress` so renderers can turn backend activity events into natural spoken progress updates.
 - The backend agent owns truth, memory, tools, and task execution.
 
 This design improves perceived latency because the user hears progress while the backend agent works.
+
+## Preamble vs Progress Narration
+
+There are two latency-covering behaviors:
+
+1. **Immediate preamble:** OpenAI Realtime says one short filler line as the `ask_agent` tool begins. This covers the first quiet moment.
+2. **Progress narration:** A renderer sends meaningful backend activity events to `POST /realtime/progress`. Talkbox returns Realtime instructions that ask the voice model to narrate progress like a calm commentator, not a mechanical log reader.
+
+Talkbox does not store or own the activity stream. It owns the narration policy. Your renderer decides which events are worth sending, and your backend agent remains the source of truth.

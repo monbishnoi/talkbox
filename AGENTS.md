@@ -16,6 +16,15 @@ The backend agent owns truth, memory, tools, and task execution. Talkbox owns vo
 
 The voice layer can acknowledge, fill silence, summarize, and help the user navigate a long answer. Substantive facts must come from the configured backend agent through the `ask_agent` boundary.
 
+## Preamble vs Progress Narration
+
+Keep these separate:
+
+- **Immediate preamble:** OpenAI Realtime may say one brief filler line as `ask_agent` starts, such as "Let me check that." This is live voice mechanics.
+- **Progress narration:** Renderers may send agent activity events to `POST /realtime/progress`. Talkbox turns those events into Realtime instructions so the voice can narrate the wait naturally.
+
+Talkbox owns the narration policy. OpenAI Realtime owns the actual voice performance. The backend agent owns the facts.
+
 ## Default Integration Shape
 
 The default public setup is:
@@ -124,6 +133,7 @@ GET  /providers
 GET  /debug/events
 POST /realtime/session
 POST /realtime/ask-agent
+POST /realtime/progress
 POST /voice/turn
 POST /chat/completions
 ```
@@ -131,6 +141,7 @@ POST /chat/completions
 Notes:
 
 - `/realtime/ask-agent` is the public Realtime backend boundary.
+- `/realtime/progress` converts renderer-provided agent activity events into OpenAI Realtime narration instructions.
 - `/realtime/ask-cal` exists only as a compatibility alias.
 - `/voice/turn` is the deterministic STT/TTS test path.
 - `/chat/completions` is the Hume/CLM-compatible experimental path.
@@ -174,6 +185,7 @@ src/adapters/agent/interface.js   Agent adapter contract
 src/adapters/voice/interface.js   Voice adapter contract
 src/runtime/voice-session.js      Deterministic STT/TTS voice-turn path
 src/runtime/voice-renderer.js     Speech-safe rendering of agent output
+src/runtime/progress-narrator.js  Realtime progress narration instruction builder
 src/runtime/agent-persona.js      Optional persona extraction for voice layer
 public/index.html                 Demo/runtime UI
 docs/architecture.md              Architecture explanation
