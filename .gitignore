@@ -21,3 +21,7 @@ npm-debug.log*
 
 # Private persona configurations
 personas/cal-voice.md
+
+# Private runtime data — real persona/config (backed up to talkbox-private, never public)
+config/private/
+personas/cal-voice.md
