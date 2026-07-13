@@ -317,6 +317,71 @@ test('Realtime progress endpoint returns reusable narration policy', async () =>
   }
 });
 
+test('history endpoint proxies recent agent chat history', async () => {
+  const agentServer = createServer(async (req, res) => {
+    assert.equal(req.method, 'GET');
+    assert.equal(req.url, '/api/chat/history?limit=4');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      sessionId: 'session-test',
+      messageCount: 2,
+      lastActivity: 1720612345000,
+      messages: [
+        { role: 'user', content: 'Where were we?', timestamp: '2026-07-10T17:23:00.000Z' },
+        { role: 'assistant', content: 'We were wiring voice hydration.', timestamp: '2026-07-10T17:24:00.000Z' },
+      ],
+    }));
+  });
+  const agentEndpoint = await startServer(agentServer);
+
+  const talkBoxServer = createTalkBoxServer({
+    agentEndpoint,
+    agentAdapter: 'cal',
+    agentName: 'Cal',
+    talkBoxApiKey: '',
+  });
+  const talkBoxEndpoint = await startServer(talkBoxServer);
+
+  try {
+    const response = await fetch(`${talkBoxEndpoint}/api/history`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.sessionId, 'session-test');
+    assert.equal(payload.messageCount, 2);
+    assert.equal(payload.messages.length, 2);
+    assert.equal(payload.messages[0].role, 'user');
+    assert.equal(payload.messages[1].content, 'We were wiring voice hydration.');
+  } finally {
+    talkBoxServer.close();
+    agentServer.close();
+  }
+});
+
+test('history endpoint degrades to empty messages when agent history fails', async () => {
+  const agentServer = createServer(async (_req, res) => {
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'down' }));
+  });
+  const agentEndpoint = await startServer(agentServer);
+
+  const talkBoxServer = createTalkBoxServer({
+    agentEndpoint,
+    agentAdapter: 'cal',
+    agentName: 'Cal',
+    talkBoxApiKey: '',
+  });
+  const talkBoxEndpoint = await startServer(talkBoxServer);
+
+  try {
+    const response = await fetch(`${talkBoxEndpoint}/api/history`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { messages: [] });
+  } finally {
+    talkBoxServer.close();
+    agentServer.close();
+  }
+});
+
 test('browser UI exposes provider-neutral runtime controls', async () => {
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 
@@ -332,6 +397,16 @@ test('browser UI exposes provider-neutral runtime controls', async () => {
   assert.match(html, /startVoiceVisualizer\(realtimeStream\);/);
   assert.match(html, /startVoiceVisualizer\(runtimeStream\);/);
   assert.match(html, /requestRealtimePreamble\(request, mode\);/);
+  assert.match(html, /hydrateRealtimeSession/);
+  assert.match(html, /\/api\/history/);
+  assert.match(html, /realtime\.hydration\.injected/);
+  assert.match(html, /type: 'conversation\.item\.create'/);
+  assert.match(html, /type: msg\.role === 'user' \? 'input_text' : 'text'/);
+  assert.match(html, /const maxTotal = 8000/);
+  assert.match(html, /const maxPerMessage = 2000/);
+  assert.match(html, /void hydrateRealtimeSession\(\)\.then\(\(\) => sendSessionOpenNudge\(\)\);/);
+  const hydrationSource = html.match(/async function hydrateRealtimeSession\(\) \{[\s\S]+?\n      \}/)?.[0] || '';
+  assert.doesNotMatch(hydrationSource, /response\.create/);
   assert.match(html, /queueRealtimeFunctionCall/);
   assert.match(html, /drainQueuedRealtimeFunctionCall/);
   assert.match(html, /if \(await drainQueuedRealtimeFunctionCall\(\)\) return;/);

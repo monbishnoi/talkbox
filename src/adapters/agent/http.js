@@ -41,7 +41,7 @@ export class HttpAgentAdapter extends AgentAdapter {
   constructor(config = {}) {
     super({ name: config.agentName || 'agent' });
     this.endpoint = String(config.agentEndpoint || 'http://localhost:8080/chat').replace(/\/+$/, '');
-    this.timeoutMs = config.agentTimeoutMs || 120_000;
+    this.timeoutMs = config.agentTimeoutMs || 300_000;
   }
 
   async send(message, options = {}) {

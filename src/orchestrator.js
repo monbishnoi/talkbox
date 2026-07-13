@@ -18,6 +18,37 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..');
 const PUBLIC_DIR = join(PROJECT_ROOT, 'public');
 
+function historyUrlFor(config, limit = 4) {
+  const base = config.agentHistoryUrl ||
+    (config.agentEndpoint ? `${String(config.agentEndpoint).replace(/\/+$/, '')}/api/chat/history` : '');
+  if (!base) return '';
+
+  try {
+    const url = new URL(base);
+    if (!url.searchParams.has('limit')) url.searchParams.set('limit', String(limit));
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+async function fetchSessionHistory(config, { limit = 4 } = {}) {
+  const historyUrl = historyUrlFor(config, limit);
+  if (!historyUrl) return { messages: [] };
+
+  try {
+    const response = await fetch(historyUrl, { signal: AbortSignal.timeout(2000) });
+    if (!response.ok) return { messages: [] };
+    const data = await response.json();
+    return {
+      ...data,
+      messages: Array.isArray(data.messages) ? data.messages : [],
+    };
+  } catch {
+    return { messages: [] };
+  }
+}
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -319,17 +350,22 @@ function realtimeInstructions(config = {}) {
     '',
     'EVERYTHING ELSE → ask_agent. No exceptions.',
     'If you are unsure whether something needs ask_agent → it does.',
-    'You have NO knowledge of your own. No memory. No opinions about facts.',
-    'Any claim about the world, about projects, about people — if it did not come from ask_agent, you are hallucinating. Do not do this.',
+    '',
+    'MEMORY: The recent conversation history is loaded into you — it is your own memory of what you and Monika have been discussing. You can draw on it naturally. For anything NEW — new facts about the world, new lookups, or actions — use ask_agent. You have no knowledge of your own beyond this conversation; do not invent facts.',
 
     // === PREAMBLE / COMMENTARY ===
-    'When calling ask_agent, you MUST make the wait feel alive:',
-    '- Before or as the tool call starts, speak one brief filler sentence.',
+    'When you call ask_agent AND expect a real wait, make the wait feel alive:',
+    '- As the tool call starts, speak one brief filler sentence.',
     '- Never stay silent for more than 2 seconds after deciding to use ask_agent.',
     '- Keep the filler natural, first-person, and under 10 words.',
     '- The filler is only conversation mechanics. It must not contain facts, answers, or conclusions.',
     '- Good fillers: "Let me check that.", "Pulling that up.", "Checking what we have.", "One sec, looking."',
     '- Do not say you are waiting on a tool, backend, system, runtime, Cal, or another brain.',
+    '',
+    'DO NOT narrate "let me check" when you are NOT actually looking something up:',
+    '- If you can answer from the recent conversation (your memory), just answer. No "let me check."',
+    '- If it is a greeting, acknowledgment, or something you already know from context, answer directly.',
+    '- The filler is for genuine waits only. Using it when you already know the answer makes you sound like you have amnesia.',
     '',
     'Examples:',
     '  User: "What meetings do I have tomorrow?"',
@@ -361,13 +397,16 @@ function realtimeInstructions(config = {}) {
 
     // === AFTER ask_agent RETURNS ===
     `After ask_agent returns, speak as ${agentName} using only the returned content.`,
+    'DEDUPLICATION: If you already said something before ask_agent returned (a greeting, acknowledgment like "got it" or "updated", or a status phrase), do NOT repeat it from the agent response. Skip any opening that duplicates what you already spoke. Start from the first new information in the agent reply.',
     'If the response has multiple sections, give brief section handles: status, next steps, risks.',
     'Keep spoken answers concise unless the user asks for detail.',
     'Only mention "the full answer is in the chat" for genuinely long structured responses: tables, code, or lists with more than 5 items. Never say it for answers that fit in 2-3 spoken sentences.',
     'When the user interrupts you, stop speaking silently. Do not say "okay", "I am listening", "go ahead", or any other interruption acknowledgment. Just listen and answer the new input.',
 
     // === ERROR HANDLING ===
-    'If ask_agent fails or times out, say you hit a temporary issue and ask the user to try again. Do not blame another system.',
+    'Only report a problem if ask_agent ACTUALLY returns an error or clearly fails. A normal wait — even several seconds of silence — is NOT a failure.',
+    'Never preemptively say you hit a glitch, error, or issue while a call is still in flight. Wait for the actual result.',
+    'If ask_agent genuinely fails or times out, say you hit a temporary issue and ask the user to try again. Do not blame another system.',
   ];
 
   if (agentPersona) {
@@ -509,7 +548,7 @@ async function handleRealtimeAskAgent(req, res, config) {
       elapsedMs,
       agentText: agentResult.text,
       calText: agentResult.text,
-      instruction: 'Use only this agent answer for the spoken response. Do not add new facts. Mention the full chat answer only for tables, code, or lists with more than 5 items.',
+      instruction: 'You may have been narrating progress before this answer arrived. Transition naturally — use a brief spoken bridge like "Alright, here\'s what I found" or "Okay so" before delivering the content. Do not restart the turn as if nothing preceded it. Use only this agent answer for the spoken response. Do not add new facts. Mention the full chat answer only for tables, code, or lists with more than 5 items.',
     });
   } catch (err) {
     emitDebug('realtime.ask_agent.error', {
@@ -542,6 +581,12 @@ async function handleRealtimeProgress(req, res, config) {
     reason: result.reason || null,
   }, body.turnId || null);
   sendJson(res, 200, result);
+}
+
+async function handleHistory(req, res, config, url) {
+  const limit = Math.min(20, Math.max(1, Number(url.searchParams.get('limit')) || 4));
+  const history = await fetchSessionHistory(config, { limit });
+  sendJson(res, 200, history);
 }
 
 function serveStatic(req, res, pathname) {
@@ -622,6 +667,11 @@ export function createTalkBoxServer(config = getConfig()) {
         stt: describeSttProviders(config),
         tts: describeTtsProviders(config),
       });
+      return;
+    }
+
+    if (url.pathname === '/api/history' && req.method === 'GET') {
+      await handleHistory(req, res, config, url);
       return;
     }
 

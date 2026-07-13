@@ -1122,6 +1122,87 @@
         realtimeChannel.send(JSON.stringify(event));
       }
 
+      function formatHistoryTimestamp(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+
+      async function hydrateRealtimeSession() {
+        try {
+          const res = await fetch('/api/history');
+          if (!res.ok) return;
+          const data = await res.json();
+          const messages = Array.isArray(data.messages) ? data.messages : [];
+          if (messages.length === 0) return;
+
+          const maxTotal = 8000;
+          const maxPerMessage = 2000;
+          const selected = [];
+          let totalChars = 0;
+
+          for (let i = messages.length - 1; i >= 0; i -= 1) {
+            const msg = messages[i] || {};
+            const role = msg.role === 'assistant' ? 'assistant' : msg.role === 'user' ? 'user' : '';
+            if (!role) continue;
+
+            let text = String(msg.content || '').trim();
+            if (!text) continue;
+            if (text.length > maxPerMessage) text = `${text.substring(0, maxPerMessage)}...`;
+            if (totalChars + text.length > maxTotal) continue;
+
+            totalChars += text.length;
+            selected.push({ ...msg, role, text });
+          }
+
+          selected.reverse();
+
+          for (const msg of selected) {
+            const timestamp = formatHistoryTimestamp(msg.timestamp);
+            const prefix = timestamp ? `[${timestamp}] ` : '';
+            sendRealtimeEvent({
+              type: 'conversation.item.create',
+              item: {
+                type: 'message',
+                role: msg.role,
+                content: [{
+                  type: msg.role === 'user' ? 'input_text' : 'text',
+                  text: `${prefix}${msg.text}`,
+                }],
+              },
+            });
+          }
+
+          logDebug('realtime.hydration.injected', {
+            messages: selected.length,
+            totalChars,
+            messageCount: data.messageCount,
+            lastActivity: data.lastActivity,
+          });
+        } catch (err) {
+          console.debug('[Talkbox] Session hydration failed:', err.message);
+        }
+      }
+
+      function sendSessionOpenNudge() {
+        if (!realtimeChannel || realtimeChannel.readyState !== 'open') return;
+        sendRealtimeEvent({
+          type: 'response.create',
+          response: {
+            modalities: ['audio', 'text'],
+            tool_choice: 'none',
+            instructions: [
+              'This voice conversation is just beginning.',
+              'Open the way you naturally would — a brief, warm hello.',
+              'If the recent conversation history shows you were mid-thread, you may pick that up instead of a cold greeting. Use your judgement.',
+              'Keep it to one short sentence. Do not list facts or launch into an answer.',
+            ].join(' '),
+          },
+        });
+        logDebug('realtime.session_open_nudge.sent');
+      }
+
       function requestRealtimePreamble(request, mode) {
         if (!realtimeChannel || realtimeChannel.readyState !== 'open') return;
         const safeRequest = request.length > 180 ? `${request.slice(0, 180)}...` : request;
@@ -1332,6 +1413,7 @@
           setRealtimeStatus('idle', 'Realtime connected');
           disconnectRealtimeButton.disabled = false;
           logDebug('realtime.data_channel.open');
+          void hydrateRealtimeSession().then(() => sendSessionOpenNudge());
         };
         realtimeChannel.onclose = () => logDebug('realtime.data_channel.closed');
         realtimeChannel.onerror = (event) => {

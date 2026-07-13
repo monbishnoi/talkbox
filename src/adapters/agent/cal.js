@@ -35,7 +35,7 @@ export class CalAgentAdapter extends AgentAdapter {
   constructor(config = {}) {
     super({ name: 'Cal' });
     this.endpoint = String(config.agentEndpoint || 'http://localhost:8080').replace(/\/+$/, '');
-    this.timeoutMs = config.agentTimeoutMs || 120_000;
+    this.timeoutMs = config.agentTimeoutMs || 300_000;
   }
 
   async send(message, options = {}) {
