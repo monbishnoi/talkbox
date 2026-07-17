@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { AgentAdapter } from './interface.js';
 import { extractAgentText } from './http.js';
 
-function buildA2ARequest(text, contextId) {
+function buildA2ARequest(text, contextId, metadata = undefined) {
   return {
     jsonrpc: '2.0',
     id: `talkbox-${randomUUID()}`,
     method: 'message/send',
     params: {
       contextId,
+      metadata,
       message: {
         role: 'user',
         parts: [{ kind: 'text', text }],
@@ -47,7 +48,7 @@ export class CalAgentAdapter extends AgentAdapter {
       const response = await fetch(`${this.endpoint}/api/chat/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildA2ARequest(message, contextId)),
+        body: JSON.stringify(buildA2ARequest(message, contextId, options.metadata)),
         signal: controller.signal,
       });
 

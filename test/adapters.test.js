@@ -166,3 +166,38 @@ Clear and direct.
   assert.match(persona, /Clear and direct/);
   assert.doesNotMatch(persona, /Operational Details/);
 });
+
+test('Cal voice persona extraction includes behavior but excludes user biography', () => {
+  const persona = extractAgentPersona(`
+## Identity
+
+You are Cal, a thinking partner.
+
+## About the User
+
+Private biography that belongs in USER.md.
+
+## Spoken Character
+
+Conversational, direct, and brief.
+
+## Voice Interaction Rules
+
+If interrupted, stop silently.
+
+## Avoid
+
+Robotic process narration.
+
+## Natural Examples
+
+“The weak spot is the handoff.”
+`, { maxChars: 1000 });
+
+  assert.match(persona, /thinking partner/);
+  assert.match(persona, /Conversational, direct, and brief/);
+  assert.match(persona, /stop silently/);
+  assert.match(persona, /Robotic process narration/);
+  assert.match(persona, /weak spot is the handoff/);
+  assert.doesNotMatch(persona, /Private biography/);
+});

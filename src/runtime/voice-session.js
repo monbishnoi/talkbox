@@ -6,12 +6,18 @@ import { detailCache } from './detail-cache.js';
 import { LatencyTracker } from './latency-tracker.js';
 import { renderSpokenResponse } from './voice-renderer.js';
 
+// ============================================================================
+// DORMANT SYSTEM 2 PATH — Deepgram/Piper deterministic STT/TTS baseline only.
+// The live product/demo path is OpenAI Realtime in public/index.html.
+// Keep for benchmarks and compatibility; do not add live Realtime behavior here.
+// ============================================================================
 function decodeAudioBase64(audioBase64) {
   if (!audioBase64) return null;
   const clean = String(audioBase64).replace(/^data:[^;]+;base64,/, '');
   return Buffer.from(clean, 'base64');
 }
 
+// DORMANT SYSTEM 2: legacy Deepgram/Piper turn runner; not live Realtime.
 export async function runVoiceTurn(input = {}, config = {}, hooks = {}) {
   const tracker = new LatencyTracker();
   const turnId = input.turnId || `turn-${randomUUID()}`;

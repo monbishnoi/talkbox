@@ -26,7 +26,7 @@ The voice layer may manage conversation mechanics:
 - progress narration from renderer-provided activity events
 - drill-down on prior answers
 
-The voice layer must not invent task answers. Substantive answers come from the backend agent through one boundary tool: `ask_agent`.
+The voice layer must not invent task answers. It may answer directly only when the complete answer is grounded in backend-supplied injected context. New information, current state, actions, tools, missing context, and uncertainty cross the `ask_agent` boundary.
 
 ## Default Runtime
 
@@ -74,6 +74,14 @@ AGENT_NAME=Cal
 ```
 
 The Cal adapter speaks A2A JSON-RPC to `POST /api/chat/send`.
+
+## Session Identity
+
+Renderers that expose more than one backend-agent session should bind a voice connection to one session ID when the connection starts. Send that ID as `contextId` on every `/realtime/ask-agent` request and as `sessionId` on `GET /api/history`.
+
+Talkbox forwards both values without interpreting them. The backend agent remains responsible for resolving the ID, keeping the histories separate, and rejecting a session that has closed. A live voice connection should not silently move to another backend session when the renderer changes views.
+
+Channel identity lasts for the whole voice connection. A local Realtime exchange is silently appended to the bound backend session without triggering agent reasoning. When Realtime calls `ask_agent`, the normal agent request owns persistence, and Talkbox forwards `metadata.channel: "voice"` so the resulting user and assistant messages retain voice provenance without being written twice.
 
 ## Realtime Path
 

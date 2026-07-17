@@ -27,7 +27,7 @@ Talkbox contributes three things that you'd otherwise have to figure out yoursel
 The central design decision. A speech model wants to answer everything itself. Talkbox constrains it:
 
 - **Identity framing:** The speech model is told "you ARE the agent" (not "you are relaying to the agent"). The user never hears about a second system.
-- **Tool enforcement:** One tool (`ask_agent`) is the only path to substantive answers. The speech model must call it for anything requiring memory, tools, project state, or facts.
+- **Context-first routing:** The speech model may answer directly when the complete answer is explicit in the injected user, memory, or conversation context. It calls `ask_agent` for new information, current state, actions, tools, missing context, or uncertainty.
 - **Hallucination prevention:** After `ask_agent` returns, the speech model is instructed to speak only the returned content. No invented facts.
 - **Graceful failure:** If the agent is unreachable, the speech model says "I hit a voice pipe issue" rather than making something up.
 
@@ -35,7 +35,7 @@ The central design decision. A speech model wants to answer everything itself. T
 User: "What's on my calendar today?"
 
 Speech model (internally):
-  → This requires memory/state → must call ask_agent
+  → This requires current calendar state → must call ask_agent
   → Says aloud: "Let me check that."
 
 ask_agent fires → Talkbox routes to YOUR AGENT → agent returns real answer
@@ -48,13 +48,17 @@ User hears one coherent voice. Never hears "let me ask your backend."
 
 Your agent has an identity: a name, a communication style, a personality. The speech model doesn't know any of that by default.
 
-Talkbox reads a markdown persona file, extracts identity-defining sections (Identity, Communication Style, Voice, Personality), and injects them into the speech session. The speech model then speaks *as* your agent: same name, same tone, same personality.
+Talkbox reads a markdown persona file, extracts agent identity and spoken-behavior sections (Identity, Spoken Character, Voice Interaction Rules, Communication Style, Voice, Personality), and injects them into the speech session. The speech model then speaks *as* your agent: same name, same tone, same personality. User biography, project memory, and conversation history should be supplied as separate context layers rather than duplicated in the persona.
 
 Without this, you get a generic assistant voice reading out answers. With it, the user experiences one coherent identity.
 
 ```env
 AGENT_VOICE_PERSONA_PATH=./my-agent-persona.md
 AGENT_VOICE_PERSONA_MAX_CHARS=4500
+# Optional first-response greeting name (once per voice session).
+VOICE_USER_NAME=Taylor
+# Optional backend endpoint returning session-aware voice context layers.
+AGENT_VOICE_CONTEXT_URL=http://localhost:8080/api/voice/context
 ```
 
 ### 3. Voice Rendering
@@ -130,8 +134,8 @@ User speaks
 Speech model listens (VAD detects speech end)
     ↓
 Speech model decides: is this a substantive question?
-    ├── No (greeting, clarification) → responds directly using persona
-    └── Yes (needs facts/memory/tools) → calls ask_agent
+    ├── No (greeting or fully grounded in injected context) → responds directly
+    └── Yes (new/current/actionable/missing/uncertain) → calls ask_agent
                                               ↓
                                     Talkbox routes to your agent
                                               ↓
@@ -217,6 +221,10 @@ Your agent responds with any common shape:
 
 Any HTTP endpoint that accepts text and returns text works.
 
+If your renderer has multiple agent sessions, bind voice to one session when it connects. Pass that ID as `contextId` on `POST /realtime/ask-agent` and as `sessionId` on `GET /api/history`; Talkbox forwards the identity so the backend can keep each conversation separate.
+
+Treat voice as a channel for the lifetime of that connection. Local Realtime-only exchanges should be silently appended to the bound history, while `ask_agent` exchanges use the normal agent persistence path with `channel: "voice"` metadata. This preserves one complete voice record without duplicate turns.
+
 ---
 
 ## Adapters
@@ -277,6 +285,7 @@ Beyond the core design, Talkbox provides developer tools:
 - [Experiments](docs/experiments.md) — What we tried and learned, including why OpenAI Realtime became the recommended path
 - [Benchmarks](benchmarks/ASSESSMENT.md) — Stage timing, baseline comparison, and reproducible matrix commands
 - [Baseline Notes](benchmarks/baselines/) — Curated notes for the Deepgram/Piper and OpenAI Realtime tests
+- [Changelog](CHANGELOG.md) — Release history
 - [Coding Agent Guide](AGENTS.md) — Instructions for coding agents working on Talkbox
 
 ---

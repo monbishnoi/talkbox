@@ -63,6 +63,8 @@ Cal is a reference adapter:
 AGENT_ADAPTER=cal
 AGENT_ENDPOINT=http://localhost:8080
 AGENT_NAME=Cal
+# Optional personalized greeting name.
+VOICE_USER_NAME=Taylor
 ```
 
 It posts A2A JSON-RPC to:
@@ -72,6 +74,16 @@ POST /api/chat/send
 ```
 
 This keeps Cal as an example without making Cal a dependency.
+
+For multi-session renderers, pass the session selected when voice starts as `contextId` on `/realtime/ask-agent`. The Cal adapter preserves it in the A2A request. Session hydration uses the same identity:
+
+```http
+GET /api/history?sessionId=strand-123&limit=20
+```
+
+Talkbox forwards `sessionId` to the configured agent-history endpoint. The renderer should keep this binding stable until the voice connection closes.
+
+For an `ask_agent` request originating inside a voice connection, pass `channel: "voice"` and an optional `voiceSessionId` to `/realtime/ask-agent`. The Cal adapter preserves these values in A2A `params.metadata`, allowing the backend to tag its normally persisted user and assistant messages as voice. Local voice exchanges that do not invoke the agent should use the renderer/backend's silent-writeback path instead; do not submit an `ask_agent` exchange through both paths.
 
 ## Voice Adapter Contract
 

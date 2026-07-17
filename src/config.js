@@ -121,6 +121,7 @@ export function getConfig() {
     agentEndpoint,
     agentContextId: process.env.AGENT_CONTEXT_ID || process.env.CONTEXT_ID || 'talkbox',
     agentHistoryUrl: process.env.AGENT_HISTORY_URL || '',
+    agentVoiceContextUrl: process.env.AGENT_VOICE_CONTEXT_URL || '',
     agentTimeoutMs: numberFromEnv('AGENT_TIMEOUT_MS', 300_000),
     contextId: process.env.CONTEXT_ID || process.env.AGENT_CONTEXT_ID || 'talkbox',
     humeApiKey: process.env.HUME_API_KEY || '',
@@ -134,8 +135,10 @@ export function getConfig() {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     openaiRealtimeModel: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime',
     openaiRealtimeVoice: process.env.OPENAI_REALTIME_VOICE || 'marin',
+    openaiRealtimeTranscriptionModel: process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe',
     progressNarrationEnabled: process.env.PROGRESS_NARRATION_ENABLED !== '0',
     progressNarrationStyle: process.env.PROGRESS_NARRATION_STYLE || 'calm-commentator',
+    voiceUserName: process.env.VOICE_USER_NAME || '',
     agentVoicePersonaPath: process.env.AGENT_VOICE_PERSONA_PATH || process.env.CAL_VOICE_PERSONA_PATH || '',
     agentVoicePersonaMaxChars: numberFromEnv(
       'AGENT_VOICE_PERSONA_MAX_CHARS',

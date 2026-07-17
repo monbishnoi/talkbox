@@ -1,3 +1,8 @@
+// ============================================================================
+// DORMANT SYSTEM 2 PATH — Deepgram/Piper deterministic STT/TTS baseline only.
+// The live product/demo path is OpenAI Realtime in public/index.html.
+// Keep for benchmarks and compatibility; do not add live Realtime behavior here.
+// ============================================================================
 export function formatForVoice(text) {
   const withoutMarkdown = String(text || '')
     .replace(/\r\n/g, '\n')
@@ -66,6 +71,7 @@ function extractFollowUps(text) {
   return headings.slice(0, 4);
 }
 
+// DORMANT SYSTEM 2: legacy Deepgram/Piper speech rendering; not live Realtime.
 export function renderSpokenResponse(calText, options = {}) {
   const mode = options.mode || 'brief';
   const clean = formatForVoice(calText);

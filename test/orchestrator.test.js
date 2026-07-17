@@ -4,8 +4,14 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { getConfig } from '../src/config.js';
-import { createTalkBoxServer, formatForVoice } from '../src/orchestrator.js';
+import {
+  createTalkBoxServer,
+  fetchWithConnectRetry,
+  formatForVoice,
+  realtimeInstructions,
+} from '../src/orchestrator.js';
 import { buildProgressNarrationInstruction } from '../src/runtime/progress-narrator.js';
+import { createCalAgentAdapter } from '../src/adapters/agent/cal.js';
 
 async function startServer(server) {
   server.listen(0, '127.0.0.1');
@@ -13,6 +19,26 @@ async function startServer(server) {
   const { port } = server.address();
   return `http://127.0.0.1:${port}`;
 }
+
+test('Realtime setup retries one safe pre-connection timeout', async () => {
+  let calls = 0;
+  const expected = { ok: true };
+  const result = await fetchWithConnectRetry('https://api.openai.com/v1/realtime/calls', {}, {
+    retryDelayMs: 0,
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw new TypeError('fetch failed', {
+          cause: { code: 'UND_ERR_CONNECT_TIMEOUT' },
+        });
+      }
+      return expected;
+    },
+  });
+
+  assert.equal(result, expected);
+  assert.equal(calls, 2);
+});
 
 test('formatForVoice strips markdown that sounds bad in TTS', () => {
   const formatted = formatForVoice(`
@@ -46,9 +72,11 @@ test('config preserves legacy Cal environment aliases', () => {
     'AGENT_NAME',
     'AGENT_VOICE_PERSONA_PATH',
     'AGENT_VOICE_PERSONA_MAX_CHARS',
+    'VOICE_USER_NAME',
     'CAL_ENDPOINT',
     'CAL_VOICE_PERSONA_PATH',
     'CAL_VOICE_PERSONA_MAX_CHARS',
+    'OPENAI_REALTIME_TRANSCRIPTION_MODEL',
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
@@ -57,6 +85,7 @@ test('config preserves legacy Cal environment aliases', () => {
     process.env.CAL_ENDPOINT = 'http://127.0.0.1:8080/';
     process.env.CAL_VOICE_PERSONA_PATH = '/tmp/CAL.md';
     process.env.CAL_VOICE_PERSONA_MAX_CHARS = '3200';
+    process.env.VOICE_USER_NAME = 'Taylor';
 
     const config = getConfig();
 
@@ -65,6 +94,8 @@ test('config preserves legacy Cal environment aliases', () => {
     assert.equal(config.agentName, 'Cal');
     assert.equal(config.agentVoicePersonaPath, '/tmp/CAL.md');
     assert.equal(config.agentVoicePersonaMaxChars, 3200);
+    assert.equal(config.voiceUserName, 'Taylor');
+    assert.equal(config.openaiRealtimeTranscriptionModel, 'gpt-4o-mini-transcribe');
   } finally {
     for (const key of keys) {
       if (previous[key] === undefined) {
@@ -73,6 +104,69 @@ test('config preserves legacy Cal environment aliases', () => {
         process.env[key] = previous[key];
       }
     }
+  }
+});
+
+test('Realtime instructions inject the four voice context layers without overlap', () => {
+  const instructions = realtimeInstructions({
+    agentName: 'Cal',
+    agentVoicePersonaPath: '',
+  }, {
+    layers: {
+      user: 'User-only profile detail.',
+      startupMemory: 'Canonical active project memory.',
+      conversationContext: {
+        earlierSummary: 'Earlier decision summary.',
+        recentMessages: [
+          { role: 'user', content: 'Continue this strand.' },
+          { role: 'assistant', content: 'Picking up from here.' },
+        ],
+      },
+    },
+  });
+
+  assert.match(instructions, /=== USER ===[\s\S]*User-only profile detail/);
+  assert.match(instructions, /=== STARTUP MEMORY ===[\s\S]*Canonical active project memory/);
+  assert.match(instructions, /=== CONVERSATION CONTEXT ===[\s\S]*Earlier decision summary/);
+  assert.match(instructions, /Recent conversation \(verbatim\):[\s\S]*User: Continue this strand/);
+  assert.match(instructions, /Cal: Picking up from here/);
+  assert.match(instructions, /Answer directly when the complete answer is already present/);
+  assert.match(instructions, /Call ask_agent for new information, current state, lookups, actions, tools, missing context, or uncertainty/);
+  assert.doesNotMatch(instructions, /Call ask_agent for ALL user requests/);
+});
+
+test('Cal adapter preserves voice channel metadata in A2A', async () => {
+  let received = null;
+  const calServer = createServer(async (req, res) => {
+    let raw = '';
+    for await (const chunk of req) raw += chunk;
+    received = JSON.parse(raw);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      jsonrpc: '2.0',
+      id: received.id,
+      result: {
+        state: 'completed',
+        artifacts: [{ parts: [{ kind: 'text', text: 'Voice-tagged answer' }] }],
+      },
+    }));
+  });
+  const endpoint = await startServer(calServer);
+
+  try {
+    const adapter = createCalAgentAdapter({ agentEndpoint: endpoint });
+    const result = await adapter.send('Voice question', {
+      contextId: 'strand-voice-test',
+      metadata: { channel: 'voice', voiceSessionId: 'voice-session-test' },
+    });
+    assert.equal(result.text, 'Voice-tagged answer');
+    assert.equal(received.params.contextId, 'strand-voice-test');
+    assert.deepEqual(received.params.metadata, {
+      channel: 'voice',
+      voiceSessionId: 'voice-session-test',
+    });
+  } finally {
+    calServer.close();
   }
 });
 
@@ -357,6 +451,37 @@ test('history endpoint proxies recent agent chat history', async () => {
   }
 });
 
+test('history endpoint forwards the bound Cal session ID', async () => {
+  const agentServer = createServer(async (req, res) => {
+    assert.equal(req.method, 'GET');
+    assert.equal(req.url, '/api/chat/history?limit=7&sessionId=strand-voice-test');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      sessionId: 'strand-voice-test',
+      messages: [{ role: 'user', content: 'Strand context' }],
+    }));
+  });
+  const agentEndpoint = await startServer(agentServer);
+  const talkBoxServer = createTalkBoxServer({
+    agentEndpoint,
+    agentAdapter: 'cal',
+    agentName: 'Cal',
+    talkBoxApiKey: '',
+  });
+  const talkBoxEndpoint = await startServer(talkBoxServer);
+
+  try {
+    const response = await fetch(`${talkBoxEndpoint}/api/history?limit=7&sessionId=strand-voice-test`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.sessionId, 'strand-voice-test');
+    assert.equal(payload.messages[0].content, 'Strand context');
+  } finally {
+    talkBoxServer.close();
+    agentServer.close();
+  }
+});
+
 test('history endpoint degrades to empty messages when agent history fails', async () => {
   const agentServer = createServer(async (_req, res) => {
     res.writeHead(503, { 'Content-Type': 'application/json' });
@@ -396,7 +521,7 @@ test('browser UI exposes provider-neutral runtime controls', async () => {
   assert.match(html, /margin: 16px auto 0;/);
   assert.match(html, /startVoiceVisualizer\(realtimeStream\);/);
   assert.match(html, /startVoiceVisualizer\(runtimeStream\);/);
-  assert.match(html, /requestRealtimePreamble\(request, mode\);/);
+  assert.match(html, /requestRealtimePreamble\(request, mode, call\.call_id\);/);
   assert.match(html, /hydrateRealtimeSession/);
   assert.match(html, /\/api\/history/);
   assert.match(html, /realtime\.hydration\.injected/);
@@ -410,6 +535,11 @@ test('browser UI exposes provider-neutral runtime controls', async () => {
   assert.match(html, /queueRealtimeFunctionCall/);
   assert.match(html, /drainQueuedRealtimeFunctionCall/);
   assert.match(html, /if \(await drainQueuedRealtimeFunctionCall\(\)\) return;/);
+  assert.match(html, /handleAudioStopped\(event\.response_id\)/);
+  assert.match(html, /\|\| hasRealtimeGreeted\) return;/);
+  assert.match(html, /hasRealtimeGreeted = true;[\s\S]*phase: 'session_open'/);
+  assert.match(html, /voiceUserName/);
+  assert.match(html, /Start directly with the first substantive new information/);
   assert.match(html, /tool_choice: 'none'/);
   assert.match(html, /Keep the spoken response concise unless the user asked for detail/);
   assert.match(html, /tables, code, or lists with more than 5 items/);
@@ -445,6 +575,8 @@ test('Realtime voice instructions enforce filler, chat mention bounds, and silen
   assert.match(source, /Keep spoken answers concise unless the user asks for detail/);
   assert.match(source, /tables, code, or lists with more than 5 items/);
   assert.match(source, /stop speaking silently/);
+  assert.match(source, /transcription:\s*\{[\s\S]*model: config\.openaiRealtimeTranscriptionModel/);
+  assert.match(source, /metadata:\s*\{[\s\S]*channel: body\.channel === 'voice' \? 'voice'/);
   assert.doesNotMatch(source, /You are NOT a text-to-speech reader/);
   assert.doesNotMatch(source, /Do not read it word-for-word/);
   assert.doesNotMatch(source, /Default spoken length: 2-3 sentences/);

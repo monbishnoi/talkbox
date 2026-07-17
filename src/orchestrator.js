@@ -18,7 +18,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..');
 const PUBLIC_DIR = join(PROJECT_ROOT, 'public');
 
-function historyUrlFor(config, limit = 4) {
+function historyUrlFor(config, { limit = 4, sessionId = '' } = {}) {
   const base = config.agentHistoryUrl ||
     (config.agentEndpoint ? `${String(config.agentEndpoint).replace(/\/+$/, '')}/api/chat/history` : '');
   if (!base) return '';
@@ -26,14 +26,15 @@ function historyUrlFor(config, limit = 4) {
   try {
     const url = new URL(base);
     if (!url.searchParams.has('limit')) url.searchParams.set('limit', String(limit));
+    if (sessionId) url.searchParams.set('sessionId', sessionId);
     return url.toString();
   } catch {
     return '';
   }
 }
 
-async function fetchSessionHistory(config, { limit = 4 } = {}) {
-  const historyUrl = historyUrlFor(config, limit);
+async function fetchSessionHistory(config, { limit = 4, sessionId = '' } = {}) {
+  const historyUrl = historyUrlFor(config, { limit, sessionId });
   if (!historyUrl) return { messages: [] };
 
   try {
@@ -46,6 +47,40 @@ async function fetchSessionHistory(config, { limit = 4 } = {}) {
     };
   } catch {
     return { messages: [] };
+  }
+}
+
+function voiceContextUrlFor(config, sessionId = '') {
+  const base = config.agentVoiceContextUrl ||
+    (config.agentAdapter === 'cal' && config.agentEndpoint
+      ? `${String(config.agentEndpoint).replace(/\/+$/, '')}/api/voice/context`
+      : '');
+  if (!base) return '';
+
+  try {
+    const url = new URL(base);
+    if (sessionId) url.searchParams.set('sessionId', sessionId);
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+async function fetchAgentVoiceContext(config, sessionId = '') {
+  const contextUrl = voiceContextUrlFor(config, sessionId);
+  if (!contextUrl) return { layers: {} };
+
+  try {
+    const response = await fetch(contextUrl, { signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) {
+      console.warn(`[Talk Box] Voice context request failed with ${response.status}`);
+      return { layers: {} };
+    }
+    const payload = await response.json();
+    return payload && typeof payload === 'object' ? payload : { layers: {} };
+  } catch (error) {
+    console.warn(`[Talk Box] Voice context unavailable: ${error.message}`);
+    return { layers: {} };
   }
 }
 
@@ -293,6 +328,11 @@ async function handleChatCompletions(req, res, config) {
   }
 }
 
+// ============================================================================
+// DORMANT SYSTEM 2 PATH — /voice/turn serves the deterministic STT/TTS baseline.
+// The live product/demo path is OpenAI Realtime via /realtime/*.
+// Keep for benchmarks and compatibility; do not add live Realtime behavior here.
+// ============================================================================
 async function handleVoiceTurn(req, res, config) {
   if (!isAuthorized(req, config)) {
     sendJson(res, 401, { error: 'Unauthorized' });
@@ -330,7 +370,23 @@ async function handleVoiceTurn(req, res, config) {
   }
 }
 
-function realtimeInstructions(config = {}) {
+function formatConversationContext(context = {}) {
+  const parts = [];
+  if (context.earlierSummary) {
+    parts.push(`Earlier conversation summary:\n${context.earlierSummary}`);
+  }
+  if (Array.isArray(context.recentMessages) && context.recentMessages.length) {
+    const recent = context.recentMessages
+      .filter(message => message && (message.role === 'user' || message.role === 'assistant'))
+      .map(message => `${message.role === 'user' ? 'User' : 'Cal'}: ${String(message.content || '').trim()}`)
+      .filter(line => !line.endsWith(':'))
+      .join('\n\n');
+    if (recent) parts.push(`Recent conversation (verbatim):\n${recent}`);
+  }
+  return parts.join('\n\n');
+}
+
+export function realtimeInstructions(config = {}, voiceContext = {}) {
   const agentName = config.agentName || 'your agent';
   const agentPersona = loadAgentPersona(config);
   const instructions = [
@@ -339,19 +395,22 @@ function realtimeInstructions(config = {}) {
     `The user should experience you as ${agentName} — not as a relay, wrapper, or separate assistant.`,
     `Never say you are "asking another system", "talking to ${agentName}", "relaying", or "waiting on ${agentName}". Internally, ask_agent is YOUR runtime — your memory, your tools, your knowledge. It is you.`,
 
-    // === THE FUNDAMENTAL RULE ===
-    'RULE: Call ask_agent for ALL user requests. This is your default behavior.',
+    // === CONTEXT-FIRST ROUTING ===
+    'RULE: Answer directly when the complete answer is already present in the injected conversation context, startup memory, user context, or voice persona.',
+    'Treat those injected layers as your own bounded memory. Ground direct answers only in what they actually contain.',
     '',
-    'You handle ONLY these directly (no ask_agent needed):',
+    'Handle these directly without ask_agent:',
     '- Greetings and goodbyes: "hi", "hey", "good morning", "bye", "talk later"',
     '- Acknowledgments: "okay", "got it", "thanks", "sure"',
     '- Requests about YOUR voice output: "say that again", "repeat that", "speak slower"',
     '- Ultra-trivial small talk the user initiates: "how are you?"',
+    '- Conversation continuity and recall that is fully answered by the injected context: "what were we just discussing?", "what did we decide?", "where did we leave off?"',
+    '- Follow-up questions whose complete answer is explicit in the injected context',
     '',
-    'EVERYTHING ELSE → ask_agent. No exceptions.',
-    'If you are unsure whether something needs ask_agent → it does.',
+    'Call ask_agent for new information, current state, lookups, actions, tools, missing context, or uncertainty.',
+    'If answering would require guessing, extending beyond the injected context, checking whether something changed, or performing work, call ask_agent.',
     '',
-    'MEMORY: The recent conversation history is loaded into you — it is your own memory of what you and Monika have been discussing. You can draw on it naturally. For anything NEW — new facts about the world, new lookups, or actions — use ask_agent. You have no knowledge of your own beyond this conversation; do not invent facts.',
+    'MEMORY: The injected context is your bounded voice memory. Use it naturally for continuity. For anything new, missing, current, actionable, or uncertain, use ask_agent. Do not invent facts.',
 
     // === PREAMBLE / COMMENTARY ===
     'When you call ask_agent AND expect a real wait, make the wait feel alive:',
@@ -374,9 +433,9 @@ function realtimeInstructions(config = {}) {
     '  You: "You have three meetings. First one is at nine..."',
     '',
     '  User: "What did we decide about the voice architecture?"',
-    '  You (immediately): "Let me pull that up..."',
-    '  [ask_agent returns]',
-    '  You: "So we decided on three pillars..."',
+    '  [If the decision is explicit in injected context]',
+    '  You: "We decided on three pillars..."',
+    '  [No ask_agent call]',
     '',
     '  User: "Can you look at the OpenAI docs on voice agents?"',
     '  You (immediately): "Checking the OpenAI developer docs..."',
@@ -397,7 +456,8 @@ function realtimeInstructions(config = {}) {
 
     // === AFTER ask_agent RETURNS ===
     `After ask_agent returns, speak as ${agentName} using only the returned content.`,
-    'DEDUPLICATION: If you already said something before ask_agent returned (a greeting, acknowledgment like "got it" or "updated", or a status phrase), do NOT repeat it from the agent response. Skip any opening that duplicates what you already spoke. Start from the first new information in the agent reply.',
+    'DEDUPLICATION: If you already said something before ask_agent returned, do not repeat or paraphrase it.',
+    'After a filler, do not add another greeting, acknowledgment, bridge, opener, or transition. Start directly with the first substantive new information in the agent reply.',
     'If the response has multiple sections, give brief section handles: status, next steps, risks.',
     'Keep spoken answers concise unless the user asks for detail.',
     'Only mention "the full answer is in the chat" for genuinely long structured responses: tables, code, or lists with more than 5 items. Never say it for answers that fit in 2-3 spoken sentences.',
@@ -412,9 +472,26 @@ function realtimeInstructions(config = {}) {
   if (agentPersona) {
     instructions.push(
       '',
-      '=== PERSONA ===',
+      '=== CAL VOICE ===',
       'Use this personality context as your voice identity. Preserve the communication style, but do not recite this document:',
       agentPersona,
+    );
+  }
+
+  const layers = voiceContext.layers || {};
+  if (layers.user) {
+    instructions.push('', '=== USER ===', 'Durable facts and preferences about the user:', layers.user);
+  }
+  if (layers.startupMemory) {
+    instructions.push('', '=== STARTUP MEMORY ===', 'Canonical active memory about current work and projects:', layers.startupMemory);
+  }
+  const conversationContext = formatConversationContext(layers.conversationContext);
+  if (conversationContext) {
+    instructions.push(
+      '',
+      '=== CONVERSATION CONTEXT ===',
+      'This is the active Home or Strand conversation. Treat it as your own continuity across chat and voice:',
+      conversationContext,
     );
   }
 
@@ -426,7 +503,7 @@ function askAgentTool(config = {}) {
   return {
     type: 'function',
     name: 'ask_agent',
-    description: `Your brain. Call this for ANY user request that is not a simple greeting or acknowledgment. This is where your knowledge, memory, tools, and reasoning live. Without this, you know nothing. When in doubt, call it.`,
+    description: `Your runtime for anything not fully answered by injected context. Call this for new information, current state, lookups, actions, tools, missing context, or uncertainty. Do not call it for greetings or conversation recall that the injected context answers completely.`,
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -446,7 +523,28 @@ function askAgentTool(config = {}) {
   };
 }
 
-async function handleRealtimeSession(req, res, config) {
+export async function fetchWithConnectRetry(url, options = {}, {
+  fetchImpl = fetch,
+  retries = 1,
+  retryDelayMs = 250,
+} = {}) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fetchImpl(url, options);
+    } catch (error) {
+      const isConnectTimeout = error?.cause?.code === 'UND_ERR_CONNECT_TIMEOUT'
+        || error?.code === 'UND_ERR_CONNECT_TIMEOUT';
+      if (!isConnectTimeout || attempt >= retries) throw error;
+      attempt += 1;
+      if (retryDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
+    }
+  }
+}
+
+async function handleRealtimeSession(req, res, config, url) {
   if (!isAuthorized(req, config)) {
     sendJson(res, 401, { error: 'Unauthorized' });
     return;
@@ -462,11 +560,18 @@ async function handleRealtimeSession(req, res, config) {
     return;
   }
 
+  const sessionId = url?.searchParams?.get('sessionId') || '';
+  const voiceContext = await fetchAgentVoiceContext(config, sessionId);
   const session = {
     type: 'realtime',
     model: config.openaiRealtimeModel,
-    instructions: realtimeInstructions(config),
+    instructions: realtimeInstructions(config, voiceContext),
     audio: {
+      input: {
+        transcription: {
+          model: config.openaiRealtimeTranscriptionModel || 'gpt-4o-mini-transcribe',
+        },
+      },
       output: {
         voice: config.openaiRealtimeVoice,
       },
@@ -480,7 +585,9 @@ async function handleRealtimeSession(req, res, config) {
   form.set('session', JSON.stringify(session));
 
   const startedAt = Date.now();
-  const response = await fetch('https://api.openai.com/v1/realtime/calls', {
+  // A connect timeout occurs before OpenAI receives the POST, so one retry is
+  // safe and avoids failing voice startup on a transient TCP/TLS path.
+  const response = await fetchWithConnectRetry('https://api.openai.com/v1/realtime/calls', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${config.openaiApiKey}`,
@@ -536,6 +643,10 @@ async function handleRealtimeAskAgent(req, res, config) {
     const agentResult = await sendAgentMessage(request, config, {
       contextId: body.contextId || config.agentContextId || 'talkbox-realtime',
       timeoutMs: config.agentTimeoutMs,
+      metadata: {
+        channel: body.channel === 'voice' ? 'voice' : undefined,
+        voiceSessionId: body.voiceSessionId || undefined,
+      },
     });
     const elapsedMs = Date.now() - startedAt;
     emitDebug('realtime.ask_agent.finished', {
@@ -548,7 +659,7 @@ async function handleRealtimeAskAgent(req, res, config) {
       elapsedMs,
       agentText: agentResult.text,
       calText: agentResult.text,
-      instruction: 'You may have been narrating progress before this answer arrived. Transition naturally — use a brief spoken bridge like "Alright, here\'s what I found" or "Okay so" before delivering the content. Do not restart the turn as if nothing preceded it. Use only this agent answer for the spoken response. Do not add new facts. Mention the full chat answer only for tables, code, or lists with more than 5 items.',
+      instruction: 'The voice filler already opened this turn. Start directly with the first substantive new information. Do not add a greeting, acknowledgment, filler, bridge phrase, opener, or transition. Use only this agent answer for facts. Mention the full chat answer only for tables, code, or lists with more than 5 items.',
     });
   } catch (err) {
     emitDebug('realtime.ask_agent.error', {
@@ -585,7 +696,8 @@ async function handleRealtimeProgress(req, res, config) {
 
 async function handleHistory(req, res, config, url) {
   const limit = Math.min(20, Math.max(1, Number(url.searchParams.get('limit')) || 4));
-  const history = await fetchSessionHistory(config, { limit });
+  const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+  const history = await fetchSessionHistory(config, { limit, sessionId });
   sendJson(res, 200, history);
 }
 
@@ -646,10 +758,12 @@ export function createTalkBoxServer(config = getConfig()) {
         openaiConfigured: !!config.openaiApiKey,
         openaiRealtimeModel: config.openaiRealtimeModel,
         openaiRealtimeVoice: config.openaiRealtimeVoice,
+        openaiRealtimeTranscriptionModel: config.openaiRealtimeTranscriptionModel,
         progressNarrationEnabled: config.progressNarrationEnabled,
         progressNarrationStyle: config.progressNarrationStyle,
         agentAdapter: config.agentAdapter,
         agentName: config.agentName,
+        voiceUserName: config.voiceUserName,
         agentEndpoint: config.agentEndpoint,
         deepgramConfigured: !!config.deepgramApiKey,
         commandSttConfigured: !!config.commandSttCommand,
@@ -695,7 +809,7 @@ export function createTalkBoxServer(config = getConfig()) {
     }
 
     if (url.pathname === '/realtime/session' && req.method === 'POST') {
-      await handleRealtimeSession(req, res, config);
+      await handleRealtimeSession(req, res, config, url);
       return;
     }
 

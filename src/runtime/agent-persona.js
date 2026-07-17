@@ -2,10 +2,13 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const DEFAULT_SECTION_NAMES = [
   'Identity',
-  'About Monika',
-  'About the User',
+  'Who You Are',
   'How I Communicate',
   'Communication Style',
+  'Spoken Character',
+  'Voice Interaction Rules',
+  'Avoid',
+  'Natural Examples',
   'Voice',
   'Personality',
   'Self-Awareness',

@@ -1,6 +1,6 @@
 {
   "name": "talkbox",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Open-source voice orchestrator that gives any AI agent a natural conversational voice.",
   "type": "module",
   "license": "MIT",

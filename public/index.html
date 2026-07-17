@@ -639,6 +639,7 @@
         getAudioStream,
         getBrowserSupportedMimeType,
       } from 'https://esm.sh/hume?bundle';
+      import { createRealtimeResponseCoordinator } from './realtime-response-coordinator.js';
 
       const status = document.getElementById('status');
       const statusText = document.getElementById('statusText');
@@ -740,9 +741,20 @@
       let realtimeTurnStartedAt = 0;
       let realtimeFirstAudioMs = null;
       let realtimeEventCount = 0;
+      let runtimeConfig = {};
+      let hasRealtimeGreeted = false;
       let handledRealtimeToolCalls = new Set();
       let pendingRealtimeToolArgs = new Map();
-      let queuedRealtimeToolCall = null;
+      let queuedRealtimeToolCalls = [];
+      const realtimeResponseCoordinator = createRealtimeResponseCoordinator({
+        sendEvent: (event) => sendRealtimeEvent(event),
+        onLifecycle: (state, detail) => {
+          logDebug(`realtime.response_coordinator.${state}`, detail);
+          if (state === 'timeout') {
+            setStage('assistant', 'active', 'Realtime response recovery');
+          }
+        },
+      });
 
       const testModeLabels = {
         local: 'Test 3: local agent voice',
@@ -907,9 +919,6 @@
         realtimeTurnStartedAt = Date.now();
         realtimeFirstAudioMs = null;
         realtimeEventCount = 0;
-        handledRealtimeToolCalls = new Set();
-        pendingRealtimeToolArgs = new Map();
-        queuedRealtimeToolCall = null;
         realtimeMetricFirstAudio.textContent = '-';
         realtimeMetricCal.textContent = '-';
         realtimeMetricEvents.textContent = '0';
@@ -953,14 +962,14 @@
       }
 
       async function loadRuntimeConfig() {
-        const config = await loadConfig();
-        realtimeMetricModel.textContent = config.openaiRealtimeModel || '-';
-        realtimeMetricVoice.textContent = config.openaiRealtimeVoice || '-';
-        if (!config.openaiConfigured) {
+        runtimeConfig = await loadConfig();
+        realtimeMetricModel.textContent = runtimeConfig.openaiRealtimeModel || '-';
+        realtimeMetricVoice.textContent = runtimeConfig.openaiRealtimeVoice || '-';
+        if (!runtimeConfig.openaiConfigured) {
           setRealtimeStatus('idle', 'Missing OpenAI key');
           connectRealtimeButton.disabled = true;
         }
-        return config;
+        return runtimeConfig;
       }
 
       function speakInBrowser(text) {
@@ -1062,6 +1071,7 @@
       }
 
       function closeRealtime() {
+        realtimeResponseCoordinator.reset();
         realtimeChannel?.close?.();
         realtimePeer?.close?.();
         for (const track of realtimeStream?.getTracks?.() || []) track.stop();
@@ -1069,7 +1079,10 @@
         realtimeChannel = null;
         realtimePeer = null;
         realtimeStream = null;
-        queuedRealtimeToolCall = null;
+        queuedRealtimeToolCalls = [];
+        handledRealtimeToolCalls = new Set();
+        pendingRealtimeToolArgs = new Map();
+        hasRealtimeGreeted = false;
         connectRealtimeButton.disabled = false;
         runRealtimeTextButton.disabled = false;
         disconnectRealtimeButton.disabled = true;
@@ -1186,30 +1199,35 @@
       }
 
       function sendSessionOpenNudge() {
-        if (!realtimeChannel || realtimeChannel.readyState !== 'open') return;
-        sendRealtimeEvent({
-          type: 'response.create',
+        if (!realtimeChannel || realtimeChannel.readyState !== 'open' || hasRealtimeGreeted) return;
+        hasRealtimeGreeted = true;
+        const userName = String(runtimeConfig.voiceUserName || '').trim();
+        realtimeResponseCoordinator.request({
+          phase: 'session_open',
+          waitForAudioStop: true,
           response: {
-            modalities: ['audio', 'text'],
             tool_choice: 'none',
             instructions: [
               'This voice conversation is just beginning.',
-              'Open the way you naturally would — a brief, warm hello.',
-              'If the recent conversation history shows you were mid-thread, you may pick that up instead of a cold greeting. Use your judgement.',
-              'Keep it to one short sentence. Do not list facts or launch into an answer.',
+              userName
+                ? `Say one brief, warm greeting that includes the user's name exactly once: ${userName}.`
+                : 'Say one brief, warm greeting.',
+              'This is the only session-opening greeting. Do not repeat any greeting or the user name.',
+              'Keep it to one short sentence. Do not add facts, an answer, or a second opener.',
             ].join(' '),
           },
         });
-        logDebug('realtime.session_open_nudge.sent');
+        logDebug('realtime.session_open_nudge.sent', { named: !!userName });
       }
 
-      function requestRealtimePreamble(request, mode) {
+      function requestRealtimePreamble(request, mode, callId) {
         if (!realtimeChannel || realtimeChannel.readyState !== 'open') return;
         const safeRequest = request.length > 180 ? `${request.slice(0, 180)}...` : request;
-        sendRealtimeEvent({
-          type: 'response.create',
+        realtimeResponseCoordinator.request({
+          phase: 'filler',
+          callId,
+          waitForAudioStop: true,
           response: {
-            modalities: ['audio', 'text'],
             tool_choice: 'none',
             instructions: [
               'Say exactly one short filler sentence before the agent answer is ready.',
@@ -1241,7 +1259,7 @@
           throw new Error('Incomplete ask_agent arguments: missing request');
         }
         const mode = String(args.mode || 'answer').trim();
-        requestRealtimePreamble(request, mode);
+        requestRealtimePreamble(request, mode, call.call_id);
         const res = await fetch('/realtime/ask-agent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1275,10 +1293,11 @@
               output: JSON.stringify(result),
             },
           });
-          sendRealtimeEvent({
-            type: 'response.create',
+          realtimeResponseCoordinator.request({
+            phase: 'answer',
+            callId: call.call_id,
             response: {
-              instructions: 'Speak as the configured agent in first person. Use only the tool output for facts. Keep the spoken response concise unless the user asked for detail. Mention that the full answer is visible in the UI only for tables, code, or lists with more than 5 items. Do not say you are relaying, asking another brain, or talking to the agent.',
+              instructions: 'Speak as the configured agent in first person. Use only the tool output for facts. The filler already opened this turn: do not add a greeting, acknowledgment, filler, bridge phrase, opener, or transition. Start directly with the first substantive new information. Keep the spoken response concise unless the user asked for detail. Mention that the full answer is visible in the UI only for tables, code, or lists with more than 5 items. Do not say you are relaying, asking another brain, or talking to the agent.',
             },
           });
         } catch (err) {
@@ -1290,24 +1309,26 @@
               output: JSON.stringify({ ok: false, error: err.message }),
             },
           });
-          sendRealtimeEvent({
-            type: 'response.create',
+          realtimeResponseCoordinator.request({
+            phase: 'error',
+            callId: call.call_id,
             response: {
-              instructions: 'Speak as the configured agent in first person. In one short sentence, say there is a temporary voice pipe issue and ask the user to try again. Do not say another brain or agent could not be reached. Do not invent the answer.',
+              instructions: 'Speak as the configured agent in first person. Do not add a greeting, acknowledgment, filler, bridge phrase, opener, or transition. In one short sentence, say there is a temporary voice pipe issue and ask the user to try again. Do not say another brain or agent could not be reached. Do not invent the answer.',
             },
           });
         }
       }
 
       function queueRealtimeFunctionCall(call) {
-        queuedRealtimeToolCall = call;
+        if (queuedRealtimeToolCalls.some((queued) => queued.call_id === call.call_id)) return;
+        queuedRealtimeToolCalls.push(call);
+        realtimeResponseCoordinator.requireActiveAudioStop(call.response_id);
         setStage('cal', 'active', 'Realtime ask_agent queued');
       }
 
       async function drainQueuedRealtimeFunctionCall() {
-        if (!queuedRealtimeToolCall) return false;
-        const call = queuedRealtimeToolCall;
-        queuedRealtimeToolCall = null;
+        if (queuedRealtimeToolCalls.length === 0) return false;
+        const call = queuedRealtimeToolCalls.shift();
         await handleRealtimeFunctionCall(call);
         return true;
       }
@@ -1323,9 +1344,22 @@
         realtimeMetricEvents.textContent = String(realtimeEventCount);
         setStageText('sse', 'ok', `${realtimeEventCount} Realtime events`);
         logDebug(`realtime.${event.type}`, {
-          response: event.response_id,
+          response: event.response_id || event.response?.id,
           item: event.item_id,
         });
+        if (event.type === 'response.created') {
+          realtimeResponseCoordinator.handleResponseCreated(event.response);
+          return;
+        }
+        if (event.type === 'error') {
+          realtimeResponseCoordinator.handleError(event.error);
+          setRealtimeStatus('error', event.error?.message || 'Realtime error');
+          return;
+        }
+        if (event.type === 'output_audio_buffer.stopped') {
+          realtimeResponseCoordinator.handleAudioStopped(event.response_id);
+          return;
+        }
         if (event.type === 'input_audio_buffer.speech_started') {
           resetRealtimeMetrics();
           setRealtimeStatus('listening', 'Listening');
@@ -1360,6 +1394,7 @@
             name: event.name,
             call_id: event.call_id,
             arguments: event.arguments || pendingRealtimeToolArgs.get(event.call_id) || '',
+            response_id: event.response_id || '',
           });
           return;
         }
@@ -1378,6 +1413,7 @@
           return;
         }
         if (event.type === 'response.done') {
+          realtimeResponseCoordinator.handleResponseDone(event.response);
           if (await drainQueuedRealtimeFunctionCall()) return;
           setRealtimeStatus('idle', 'Realtime connected');
         }
@@ -1385,6 +1421,11 @@
 
       async function connectRealtime({ withMic = true } = {}) {
         if (realtimePeer) closeRealtime();
+        realtimeResponseCoordinator.reset();
+        handledRealtimeToolCalls = new Set();
+        pendingRealtimeToolArgs = new Map();
+        queuedRealtimeToolCalls = [];
+        hasRealtimeGreeted = false;
         resetRealtimeMetrics();
         setRealtimeStatus('thinking', withMic ? 'Connecting Realtime' : 'Connecting Realtime text test');
         connectRealtimeButton.disabled = true;
@@ -1472,8 +1513,8 @@
             content: [{ type: 'input_text', text: prompt }],
           },
         });
-        sendRealtimeEvent({
-          type: 'response.create',
+        realtimeResponseCoordinator.request({
+          phase: 'benchmark',
           response: {
             instructions: 'This is a benchmark test. You must call ask_agent before answering. Before the tool result arrives, speak one brief filler sentence. Then speak as the configured agent in first person using only the tool output. Do not describe yourself as relaying to the agent or asking another brain.',
           },

@@ -131,6 +131,7 @@ GET  /health
 GET  /config
 GET  /providers
 GET  /debug/events
+GET  /api/history
 POST /realtime/session
 POST /realtime/ask-agent
 POST /realtime/progress
@@ -140,6 +141,7 @@ POST /chat/completions
 
 Notes:
 
+- `/api/history` proxies recent backend-agent history and forwards an optional `sessionId` query parameter.
 - `/realtime/ask-agent` is the public Realtime backend boundary.
 - `/realtime/progress` converts renderer-provided agent activity events into OpenAI Realtime narration instructions.
 - `/realtime/ask-cal` exists only as a compatibility alias.
