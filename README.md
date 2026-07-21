@@ -1,35 +1,91 @@
 # Talkbox
 
+**The voice harness for text-based agents.**
+
+[![Release v0.2.0](https://img.shields.io/badge/release-v0.2.0-blue.svg)](https://github.com/monbishnoi/talkbox/releases/tag/v0.2.0)
+[![License MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Node.js 18+](https://img.shields.io/badge/node-%3E%3D18-339933.svg?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![OpenAI Realtime](https://img.shields.io/badge/voice-OpenAI%20Realtime-412991.svg)](https://platform.openai.com/docs/guides/realtime)
+
+[![Watch the Talkbox demo](https://img.youtube.com/vi/5U29Hiqw00o/maxresdefault.jpg)](https://youtu.be/5U29Hiqw00o)
+
 **Give any AI agent a voice without giving up its brain.**
 
-You built an agent. It reasons, remembers, uses tools. Now you want to talk to it.
+You built a text-based agent. It reasons, remembers, uses tools, and completes work. Now you want to talk to it without replacing everything that makes it useful.
 
-The problem: speech-native models (like OpenAI Realtime) are incredible at natural conversation, but they replace your agent's reasoning. They become the brain. Your agent's memory, tools, and personality disappear.
+Talkbox is a voice harness that connects a speech system to an existing backend agent. The speech system listens and speaks. Your agent keeps ownership of facts, memory, reasoning, tools, and task execution. Talkbox defines and enforces the boundary between them.
 
-Talkbox sits between a speech model and your agent. The speech model handles the voice. Your agent stays the brain. Talkbox enforces the boundary between them.
+```text
+voice system  <->  Talkbox  <->  backend agent
+```
 
----
+## Architecture
 
-## Architecture Flow
+The recommended live path uses OpenAI Realtime, but Talkbox is not in the direct audio stream after setup. The browser or consuming renderer owns the microphone, WebRTC peer, audio playback, and Realtime data channel.
 
-Explore the interactive [Talkbox architecture flow](https://monbishnoi.github.io/talkbox/): voice connection, session hydration, live `ask_agent` work, and progress narration.
+```text
+┌─────────────────────┐       SDP + session config        ┌─────────────────────┐
+│ Browser / renderer  │ ─────────────────────────────────► │ Talkbox             │
+│                     │ ◄───────────────────────────────── │ voice harness       │
+│ • microphone        │          SDP answer               │                     │
+│ • WebRTC peer       │                                   │ • Realtime policy   │
+│ • data channel      │       direct WebRTC after setup   │ • ask_agent tool    │
+│ • audio playback    │ ◄────────────────────────────────► │ • agent adapters    │
+└──────────┬──────────┘            OpenAI Realtime         │ • context/persona   │
+           │                                               │ • narration policy  │
+           │ ask_agent call and result                     └──────────┬──────────┘
+           │ through renderer                                         │
+           └───────────────────────────────────────────────────────────┤
+                                                                       │ text request
+                                                                       ▼
+                                                            ┌─────────────────────┐
+                                                            │ Backend agent       │
+                                                            │ • facts and memory  │
+                                                            │ • reasoning/tools   │
+                                                            │ • task execution    │
+                                                            └─────────────────────┘
+```
 
-It shows the core contract in one sentence: **your agent owns the brain, OpenAI Realtime owns the voice, and Talkbox brings them to life.**
+Talkbox receives the browser's SDP offer at `POST /realtime/session`, builds the Realtime instructions and `ask_agent` tool, optionally loads persona and backend-supplied context, and exchanges the offer with OpenAI. It returns the SDP answer to the browser. Once connected, the browser communicates directly with OpenAI Realtime.
 
----
+When Realtime calls `ask_agent`, the consuming renderer sends the request to `POST /realtime/ask-agent`. Talkbox calls the configured backend agent through an adapter and returns the agent's complete text answer. The renderer then places that result on its Realtime data channel so the speech model can deliver it naturally.
 
-## Core Design
+Explore the interactive [Talkbox architecture flow](https://monbishnoi.github.io/talkbox/) for the connection, hydration, `ask_agent`, and progress-narration phases.
 
-Talkbox contributes three things that you'd otherwise have to figure out yourself:
+### What each layer owns
+
+| Layer | Owns | Does not own |
+|---|---|---|
+| Backend agent | Facts, memory, reasoning, tools, personality, task execution, durable history | Voice transport, listening, audio generation |
+| Talkbox | Realtime session policy, SDP bootstrap, `ask_agent` boundary, adapters, optional persona/context injection, progress-narration policy | Backend truth, backend tools, durable conversation storage, the live WebRTC data channel |
+| Browser or renderer | Microphone and playback, WebRTC/data-channel events, forwarding tool results, optional activity bridging and silent writeback | Task facts, agent reasoning, Talkbox policy |
+| Speech model | Listening, VAD, turn-taking, filler, barge-in, natural spoken delivery | Backend memory, tools, current state, task execution |
+
+### Context and session continuity
+
+Talkbox supports two complementary forms of context:
+
+- The bundled browser can fetch recent agent history through `GET /api/history` and inject selected messages into the Realtime conversation without prompting a response.
+- `AGENT_VOICE_CONTEXT_URL` can return session-aware `user`, `startupMemory`, and `conversationContext` layers. Talkbox adds those backend-supplied layers to the Realtime session instructions.
+
+Talkbox forwards session identity rather than owning it. Multi-session renderers should bind one backend session when voice starts, use it as `contextId` for `/realtime/ask-agent`, and pass it as `sessionId` for history and voice-context requests. The backend remains responsible for resolving that identity and keeping histories separate.
+
+The bundled browser also supports a short session-opening greeting. Set `VOICE_USER_NAME` to include the user's name once when a new Realtime connection opens. External renderers must implement their own session-opening event and once-per-session guard.
+
+For persistence, Talkbox forwards optional `channel: "voice"` and `voiceSessionId` metadata on agent calls. A consuming renderer or backend must implement silent writeback for Realtime-only exchanges that never cross `ask_agent`. Talkbox does not store those exchanges itself.
+
+## Core Capabilities
+
+Talkbox provides four voice-harness capabilities across its live and deterministic batch paths:
 
 ### 1. The Ask-Agent Boundary
 
 The central design decision. A speech model wants to answer everything itself. Talkbox constrains it:
 
-- **Identity framing:** The speech model is told "you ARE the agent" (not "you are relaying to the agent"). The user never hears about a second system.
+- **Identity framing:** The speech model is told that it is the agent's voice, not a relay or a second assistant. The backend agent remains the brain.
 - **Context-first routing:** The speech model may answer directly when the complete answer is explicit in the injected user, memory, or conversation context. It calls `ask_agent` for new information, current state, actions, tools, missing context, or uncertainty.
 - **Hallucination prevention:** After `ask_agent` returns, the speech model is instructed to speak only the returned content. No invented facts.
-- **Graceful failure:** If the agent is unreachable, the speech model says "I hit a voice pipe issue" rather than making something up.
+- **Graceful failure:** If the agent is unreachable, the speech model reports a temporary voice issue and asks the user to try again rather than making up an answer.
 
 ```
 User: "What's on my calendar today?"
@@ -44,28 +100,28 @@ Speech model speaks the answer as if it always knew it.
 User hears one coherent voice. Never hears "let me ask your backend."
 ```
 
-### 2. Persona Injection
+### 2. Persona and Context Injection
 
 Your agent has an identity: a name, a communication style, a personality. The speech model doesn't know any of that by default.
 
-Talkbox reads a markdown persona file, extracts agent identity and spoken-behavior sections (Identity, Spoken Character, Voice Interaction Rules, Communication Style, Voice, Personality), and injects them into the speech session. The speech model then speaks *as* your agent: same name, same tone, same personality. User biography, project memory, and conversation history should be supplied as separate context layers rather than duplicated in the persona.
+Talkbox reads an optional markdown persona file, extracts agent identity and spoken-behavior sections, and injects them into the speech session. The speech model can then speak with the agent's name, tone, and communication style. User biography, project memory, and conversation history remain separate backend-supplied context layers rather than being duplicated in the persona.
 
 Without this, you get a generic assistant voice reading out answers. With it, the user experiences one coherent identity.
 
 ```env
 AGENT_VOICE_PERSONA_PATH=./my-agent-persona.md
 AGENT_VOICE_PERSONA_MAX_CHARS=4500
-# Optional first-response greeting name (once per voice session).
+# Optional in the bundled browser: first-response greeting name.
 VOICE_USER_NAME=Taylor
 # Optional backend endpoint returning session-aware voice context layers.
 AGENT_VOICE_CONTEXT_URL=http://localhost:8080/api/voice/context
 ```
 
-### 3. Voice Rendering
+### 3. Speech-Safe Rendering
 
-AI agents think in markdown. Tables, code blocks, bullet lists, headers. None of that is hearable.
+The deterministic batch path includes a markdown-to-speech renderer. It strips visual formatting, translates common symbols, selects a concise 3–6 sentence spoken response, and keeps the complete agent text in the returned turn result. Longer structured answers can expose section headings as follow-up handles.
 
-Voice rendering transforms agent output from readable to speakable: strips markdown formatting, translates visual symbols into words, and selects a concise spoken summary (3-6 sentences) from longer responses. Section headings become follow-up prompts ("I can go deeper on X, Y, Z."). The full agent response remains available in the chat for reading.
+The live OpenAI Realtime path is different. Talkbox returns the complete backend answer to the browser and instructs Realtime to deliver it concisely. It does not run that answer through the batch markdown renderer.
 
 ### 4. Progress Narration
 
@@ -83,34 +139,6 @@ This is separate from the speech model's immediate filler. Realtime can say a qu
 
 ---
 
-## How It Works
-
-```
-┌───────────────────────┐       ┌───────────────────────────┐       ┌───────────────────────────┐
-│                       │       │                           │       │                           │
-│  🧠 YOUR AGENT        │       │  🔒 TALKBOX               │       │  🎙️ SPEECH MODEL           │
-│     (the brain)       │       │     (the boundary)        │       │     (the voice)           │
-│                       │       │                           │       │                           │
-│  • Reasoning          │       │  • Defines where the      │       │  • Listening (VAD)        │
-│  • Memory             │ ask_  │    brain is               │ sets  │  • Turn-taking            │
-│  • Tools              │ agent │  • Injects persona into   │  up   │  • Filler while agent     │
-│  • Task execution     │◄─────►│    the voice              │◄─────►│    thinks                 │
-│                       │       │  • Renders text into      │  the  │  • Natural delivery       │
-│                       │       │    speech                 │ call  │  • Barge-in /             │
-│                       │       │  • Narrates progress      │       │    interruption handling   │
-│                       │       │  • Wires the session      │       │                           │
-│                       │       │                           │       │                           │
-└───────────────────────┘       └───────────────────────────┘       └───────────────────────────┘
-```
-
-**What each layer owns:**
-
-| Layer | Owns | Does NOT own |
-|-------|------|--------------|
-| Your agent | Facts, memory, tools, reasoning, personality | Voice, listening, speaking |
-| Talkbox | Boundary enforcement, persona injection, voice rendering, progress narration policy, session wiring | Reasoning, audio generation, VAD |
-| Speech model | Natural conversation, immediate filler, barge-in, delivery, VAD | Facts, memory, tools, identity |
-
 ### Preamble vs Progress Narration
 
 Talkbox uses two different mechanisms to make long agent work feel natural:
@@ -120,13 +148,13 @@ Talkbox uses two different mechanisms to make long agent work feel natural:
 | Immediate preamble | OpenAI Realtime speech model | Says one brief filler line when it starts `ask_agent`, such as "Let me check that." |
 | Progress narration | Talkbox `/realtime/progress` + OpenAI Realtime | Converts your renderer's agent activity events into natural commentary while the agent is still working. |
 
-In other words: Realtime owns the live speaking mechanics. Talkbox owns the rules, boundary, persona, rendering, and narration policy. Your backend agent owns the truth.
+In other words: Realtime owns the live speaking mechanics. Talkbox owns the session policy, boundary, optional persona/context injection, adapter routing, and narration policy. Your backend agent owns the truth.
 
 ---
 
 ## Voice Paths
 
-### Fully Implemented: OpenAI Realtime (recommended)
+### OpenAI Realtime (recommended live path)
 
 ```
 User speaks
@@ -141,14 +169,14 @@ Speech model decides: is this a substantive question?
                                               ↓
                                     Agent returns answer
                                               ↓
-                                    Voice renderer makes it speakable
+                             Renderer returns complete tool output
                                               ↓
-                              Speech model delivers answer naturally
+                              Speech model delivers it naturally
 ```
 
 Turn-taking, filler ("Got it, checking that"), barge-in, and silence detection are native capabilities of the speech model. Talkbox does not implement these. Talkbox enables you to *use* them without replacing your agent's brain.
 
-This is the only path where all three core capabilities (ask-agent boundary, persona injection, voice rendering) work together in a live conversational experience.
+This is the path where the `ask_agent` boundary, optional persona/context injection, and Realtime delivery work together in a live conversational experience. Progress narration is available when the consuming renderer supplies agent activity events.
 
 ### Batch Path: STT → Agent → TTS (testing and benchmarking)
 
@@ -223,7 +251,7 @@ Any HTTP endpoint that accepts text and returns text works.
 
 If your renderer has multiple agent sessions, bind voice to one session when it connects. Pass that ID as `contextId` on `POST /realtime/ask-agent` and as `sessionId` on `GET /api/history`; Talkbox forwards the identity so the backend can keep each conversation separate.
 
-Treat voice as a channel for the lifetime of that connection. Local Realtime-only exchanges should be silently appended to the bound history, while `ask_agent` exchanges use the normal agent persistence path with `channel: "voice"` metadata. This preserves one complete voice record without duplicate turns.
+Treat voice as a channel for the lifetime of that connection. When a renderer includes `channel: "voice"` and an optional `voiceSessionId` on `/realtime/ask-agent`, Talkbox forwards that metadata to the backend adapter. The renderer or backend remains responsible for silently writing back local Realtime-only exchanges and avoiding duplicate persistence.
 
 ---
 
@@ -240,7 +268,7 @@ Treat voice as a channel for the lifetime of that connection. Local Realtime-onl
 
 | Path | Status | Best for |
 |------|--------|----------|
-| OpenAI Realtime | **Fully implemented** | Live conversation with filler, barge-in, natural delivery |
+| OpenAI Realtime | **Recommended** | Live conversation with filler, barge-in, natural delivery |
 | STT → Agent → TTS | Functional | Benchmarking, testing, local/offline use |
 | Hume EVI | Experimental | Reference only. Hume owns too much of the loop for clean boundary enforcement. |
 
@@ -269,24 +297,24 @@ Treat voice as a channel for the lifetime of that connection. Local Realtime-onl
 
 Beyond the core design, Talkbox provides developer tools:
 
-- **Session wiring** — Handles WebRTC/SDP negotiation, data channel setup, and tool call routing so you don't have to build the real-time plumbing yourself
-- **Provider abstraction** — Swap STT/TTS providers in the batch path without changing agent code
-- **Progress narration endpoint** — Normalize renderer-provided agent events into OpenAI Realtime instructions for natural "what's happening" commentary during long waits
-- **Latency tracking** — Measures each stage (STT, agent, render, TTS) with millisecond precision
-- **Detail cache** — Stores full agent responses so the chat shows complete answers while voice summarizes
-- **Debug pipeline** — Real-time SSE event stream showing every stage as it happens
-- **Benchmark suite** — Provider matrix testing for latency and reliability
+- **Realtime bootstrap:** Builds the session instructions and tools, exchanges the browser's SDP offer with OpenAI, and returns the answer; the consuming browser owns the peer and data channel
+- **Provider abstraction:** Swap STT/TTS providers in the batch path without changing agent code
+- **Progress narration endpoint:** Normalize renderer-provided agent events into OpenAI Realtime instructions for natural "what's happening" commentary during long waits
+- **Batch latency tracking:** Measures each deterministic STT, agent, render, and TTS stage with millisecond precision
+- **Batch detail cache:** Retains recent full and spoken turn representations in memory for deterministic pipeline integrations
+- **Debug pipeline:** Real-time SSE event stream showing every stage as it happens
+- **Benchmark suite:** Provider matrix testing for latency and reliability
 
 ---
 
 ## Docs
 
-- [Adapters](docs/adapters.md) — Writing custom adapters
-- [Experiments](docs/experiments.md) — What we tried and learned, including why OpenAI Realtime became the recommended path
-- [Benchmarks](benchmarks/ASSESSMENT.md) — Stage timing, baseline comparison, and reproducible matrix commands
-- [Baseline Notes](benchmarks/baselines/) — Curated notes for the Deepgram/Piper and OpenAI Realtime tests
-- [Changelog](CHANGELOG.md) — Release history
-- [Coding Agent Guide](AGENTS.md) — Instructions for coding agents working on Talkbox
+- [Adapters](docs/adapters.md): Writing custom adapters
+- [Experiments](docs/experiments.md): What we tried and learned, including why OpenAI Realtime became the recommended path
+- [Benchmarks](benchmarks/ASSESSMENT.md): Stage timing, baseline comparison, and reproducible matrix commands
+- [Baseline Notes](benchmarks/baselines/): Curated notes for the Deepgram/Piper and OpenAI Realtime tests
+- [Changelog](CHANGELOG.md): Release history
+- [Coding Agent Guide](AGENTS.md): Instructions for coding agents working on Talkbox
 
 ---
 
