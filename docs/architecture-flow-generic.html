@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Talkbox Voice Harness Architecture</title>
+  <style>
+    :root { --ink:#172333; --muted:#5e7083; --accent:#176de4; --accent-soft:#eaf3ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:#f4f7fa; font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button { font:inherit; }
+    code { font:12px/1.2 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
+    .page { width:min(1440px,calc(100% - 44px)); margin:24px auto 48px; overflow:hidden; border:1px solid #8dafe4; border-radius:10px; background:#fff; box-shadow:0 18px 44px rgba(25,48,78,.12); }
+    .chrome { display:flex; align-items:center; gap:10px; height:34px; padding:0 16px; color:#fff; background:#121c3c; font-size:12px; font-weight:800; }
+    .lights { display:flex; gap:5px; }.lights i { width:9px; height:9px; border-radius:50%; background:#ee5e54; }.lights i:nth-child(2) { background:#dfb13f; }.lights i:nth-child(3) { background:#4fc575; }
+    .intro { padding:28px 44px 15px; }
+    .eyebrow { margin:0 0 6px; color:#176de4; font-size:11px; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }
+    h1 { margin:0; font-size:clamp(29px,4vw,46px); line-height:1.05; letter-spacing:-.045em; }
+    .lede { max-width:1040px; margin:11px 0 0; color:var(--muted); font-size:16px; }
+    .scope { max-width:1120px; margin:17px 0 0; padding:10px 12px; border-left:3px solid #176de4; border-radius:4px; color:#405a75; background:#eaf3ff; font-size:13px; }
+    .reference { margin:9px 0 0; color:#687b8e; font-size:12px; }
+
+    .diagram-wrap { padding:12px 28px 0; }
+    .diagram { position:relative; aspect-ratio:1200 / 630; min-height:575px; overflow:hidden; border:1px solid #d3deea; border-radius:9px 9px 0 0; background-color:#fbfcfe; background-image:radial-gradient(#d6e0ea 1px,transparent 1px); background-size:18px 18px; }
+    .product-boundary { position:absolute; z-index:0; left:3.3%; top:10%; width:30%; height:82%; padding:16px; border:2px solid #2d78d1; border-radius:10px; background:rgba(237,246,255,.86); }
+    .boundary-head { display:flex; align-items:center; gap:9px; color:#1358a7; font-size:14px; font-weight:850; }.boundary-head small { display:block; color:#64778c; font-size:11px; font-style:italic; font-weight:500; }
+    .card { position:absolute; z-index:2; width:19.5%; min-height:170px; padding:15px; border:1px solid #bdcad8; border-radius:8px; background:#fff; box-shadow:0 4px 12px rgba(26,48,70,.07); transition:border-color .2s ease,box-shadow .2s ease,transform .2s ease,opacity .2s ease; }
+    .card.active { border:2px solid var(--accent); box-shadow:0 10px 20px rgba(22,88,154,.15); transform:translateY(-3px); }.card.dim { opacity:.55; }
+    .app { left:5.5%; top:25%; width:25%; min-height:104px; height:104px; padding:12px 13px; --dot:#176de4; }.agent { left:5.5%; top:50%; width:25%; min-height:236px; height:236px; --dot:#bc6912; }.talkbox { left:40.3%; top:22%; width:21%; min-height:290px; --dot:#6c4ab7; }.voice { left:73.5%; top:22%; width:21.5%; min-height:230px; --dot:#178654; }
+    .card h2 { display:flex; align-items:center; gap:8px; margin:0; color:#173f82; font-size:17px; line-height:1.15; }.card .dot { flex:none; width:10px; height:10px; border-radius:50%; background:var(--dot); box-shadow:0 0 0 4px rgba(65,115,170,.13); }
+    .card .sub { min-height:32px; margin:5px 0 9px; color:#607387; font-size:11px; font-style:italic; }.card ul { margin:0; padding-left:16px; color:#405267; font-size:11px; }.card li + li { margin-top:4px; }
+    .agent h2 { color:#814804; }.talkbox h2 { color:#5d3da4; }.voice h2 { color:#12623a; }
+    .thesis { margin:9px 0; padding:7px 8px; border-radius:6px; color:#6b4a1f; background:#fff4e4; font-size:10px; font-weight:800; }.voice .thesis { color:#175f41; background:#ebf8f1; }
+    .scope-pill { display:block; margin-top:11px; padding:5px 7px; border:1px solid #dacdfa; border-radius:999px; color:#6246a7; background:#faf7ff; text-align:center; font-size:9px; font-weight:800; }
+    .app-caps { display:flex; flex-wrap:wrap; gap:5px 10px; margin-top:7px; color:#496079; font-size:10px; font-weight:750; }.app-caps span::before { content:""; display:inline-block; width:5px; height:5px; margin-right:4px; border-radius:50%; background:#176de4; vertical-align:1px; }
+
+    .wires { position:absolute; inset:0; z-index:1; width:100%; height:100%; pointer-events:none; }.edge { display:none; fill:none; stroke:var(--accent); stroke-width:2.5; stroke-linecap:round; marker-end:url(#arrow); filter:drop-shadow(0 0 2px rgba(21,109,229,.22)); }.edge.active { display:block; animation:glow 1.15s ease-in-out infinite; }.edge.return { stroke-dasharray:1 8; stroke-linecap:round; }.edge.return.active,.edge.direct.active { animation:travel 1s linear infinite; }.edge.direct { stroke:#198b66; stroke-width:3; stroke-dasharray:11 6; filter:drop-shadow(0 0 2px rgba(25,139,102,.24)); }
+    @keyframes travel { to { stroke-dashoffset:-34; } } @keyframes glow { 50% { opacity:.48; stroke-width:3.25; } }
+    .edge-label { display:none; fill:var(--accent); font-size:11px; font-weight:800; paint-order:stroke; stroke:#fbfcfe; stroke-width:4px; stroke-linejoin:round; }.edge-label.active { display:block; }
+    .legend { position:absolute; z-index:3; left:4%; bottom:2.5%; display:flex; flex-wrap:wrap; gap:16px; color:#65778a; font-size:11px; }.legend span { display:flex; align-items:center; gap:6px; }.sample { width:32px; border-top:2px solid #8b9bad; }.sample.dashed { border-top:3px dotted #8b9bad; }.sample.direct { height:3px; border:0; background:repeating-linear-gradient(to right,#198b66 0 10px,transparent 10px 15px); }
+
+    .detail { display:grid; grid-template-columns:minmax(0,1.22fr) minmax(290px,.78fr); gap:16px; padding:17px 28px 22px; border-top:1px solid #d3deea; background:#fbfcfe; }.phase-detail,.principle { border:1px solid #d7e1eb; border-radius:8px; background:#fff; box-shadow:0 4px 12px rgba(32,54,76,.04); }.phase-detail { padding:17px 19px; border-left:4px solid var(--accent); }.phase-detail .kicker { margin:0; color:var(--accent); font-size:11px; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }.phase-detail h2 { margin:3px 0 9px; font-size:21px; letter-spacing:-.02em; }.phase-detail ul { margin:0; padding-left:17px; color:#405267; }.phase-detail li + li { margin-top:6px; }.payoff { margin:12px 0 0; padding:10px 11px; border-radius:5px; color:#4d5f72; background:#f1f5f8; font-size:12px; }.principle { padding:17px; }.principle h2 { margin:0 0 9px; color:#834a0b; font-size:14px; }.principle p { margin:0; color:#56697d; font-size:12px; }.principle p + p { margin-top:9px; }
+    .controls { display:flex; align-items:stretch; border-top:1px solid #d3deea; background:#f8faff; }.phase-button { flex:1; display:flex; align-items:center; gap:9px; padding:12px 14px; border:0; border-right:1px solid #d3deea; color:#5c6e80; background:transparent; cursor:pointer; text-align:left; }.phase-button:hover,.phase-button:focus-visible { background:#edf3fb; outline:none; }.phase-button[aria-pressed="true"] { color:var(--ink); background:var(--accent-soft); box-shadow:inset 0 -3px 0 var(--accent); }.phase-number { display:grid; flex:none; width:22px; height:22px; place-items:center; border-radius:50%; color:#fff; background:#b6c2ce; font-size:11px; font-weight:800; }.phase-button[aria-pressed="true"] .phase-number { background:var(--accent); }.phase-name { font-size:12px; font-weight:800; }.phase-sub { display:block; margin-top:1px; color:#7b8998; font-size:10px; }.utility { display:flex; align-items:center; gap:8px; padding:9px; }.utility button { min-height:34px; padding:0 11px; border:1px solid #176de4; border-radius:5px; color:#176de4; background:#fff; font-size:12px; font-weight:800; cursor:pointer; }.utility .primary { color:#fff; background:#176de4; }
+    @media (max-width:960px) { .page { width:min(100% - 20px,760px); margin-top:12px; }.intro { padding:24px 20px 12px; }.diagram-wrap { padding:10px 10px 0; }.diagram { min-height:0; aspect-ratio:auto; padding:14px; background-image:none; }.product-boundary { position:relative; inset:auto; width:auto; height:auto; }.boundary-head { margin-bottom:12px; }.card { position:relative; inset:auto; width:auto; min-height:0; height:auto; margin:10px 0; }.wires,.legend { display:none; }.phase-route { margin-top:14px; }.detail { grid-template-columns:1fr; padding:14px 10px 18px; }.controls { flex-wrap:wrap; }.phase-button { flex:1 1 46%; }.utility { width:100%; justify-content:flex-end; border-top:1px solid #d3deea; } }
+    @media (prefers-reduced-motion:reduce) { .edge.active,.edge.return.active,.edge.direct.active { animation:none; }.card { transition:none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="chrome"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span> Talkbox Voice Harness</header>
+    <section class="intro">
+      <p class="eyebrow">Product-agnostic architecture</p>
+      <h1>Reason across time. Build rapport now.</h1>
+      <p class="lede">Your agent and your voice model optimize for different horizons. Talkbox keeps those strengths complementary: the agent remains responsible for truth and work, while the voice model makes the interaction feel alive in the moment.</p>
+      <p class="scope"><strong>Honest boundary:</strong> Talkbox authors voice policy and connects the systems, but it is not in the live audio path. After setup, your browser communicates directly with the current live voice provider, OpenAI Realtime.</p>
+      <p class="reference">Cal is the reference implementation. Talkbox's default generic adapter works with text-based agents that accept text and return text.</p>
+    </section>
+
+    <section class="diagram-wrap"><div class="diagram" aria-label="Animated product-agnostic Talkbox architecture flow">
+      <section class="product-boundary"><div class="boundary-head"><span>Your product<small>Your app and agent remain one user experience</small></span></div></section>
+      <article class="card app" data-node="app"><h2><span class="dot"></span>Your app / renderer</h2><div class="app-caps"><span>Mic and playback</span><span>WebRTC data channel</span><span>Tool-result delivery</span><span>Silent writeback</span></div></article>
+      <article class="card agent" data-node="agent"><h2><span class="dot"></span>Your agent</h2><p class="sub">The text or LLM agent that owns truth and work.</p><p class="thesis">Optimizes for reasoning across time: memory, past decisions, future actions, and the task.</p><ul><li>Owns facts and durable conversation history</li><li>Reasons with memory and tools</li><li>Executes actions and current-state lookups</li><li>Accepts text and returns authoritative text</li></ul></article>
+      <article class="card talkbox" data-node="talkbox"><h2><span class="dot"></span>Talkbox</h2><p class="sub">The voice harness between live conversation and agent reasoning.</p><ul><li>Defines the <code>ask_agent</code> boundary</li><li>Injects persona and backend context</li><li>Forwards session identity and voice metadata</li><li>Builds progress-narration policy</li><li>Batch path: speech-safe rendering</li><li>Bundled browser: greets by name once</li></ul><span class="scope-pill">Voice policy, not task truth</span></article>
+      <article class="card voice" data-node="voice"><h2><span class="dot"></span>Voice model</h2><p class="sub">OpenAI Realtime is the current live example.</p><p class="thesis">Optimizes for rapport in the here and now: listening, timing, turn-taking, and delivery.</p><ul><li>VAD, transcription, and voice synthesis</li><li>Immediate filler and natural pacing</li><li>Calls <code>ask_agent</code> when policy requires</li><li>Speaks the agent's returned answer</li></ul></article>
+
+      <svg class="wires" viewBox="0 0 1200 630" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="arrow" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="context-stroke" /></marker></defs>
+        <path class="edge" id="app-agent" d="M216 265 L216 316" />
+        <path class="edge return" id="agent-app" d="M238 316 L238 265" />
+        <path class="edge" id="app-talkbox" d="M366 215 L430 215 L430 180 L484 180" />
+        <path class="edge return" id="talkbox-app" d="M484 207 L452 207 L452 245 L366 245" />
+        <path class="edge" id="agent-talkbox" d="M366 455 L432 455 L432 360 L484 360" />
+        <path class="edge return" id="talkbox-agent" d="M484 387 L454 387 L454 485 L366 485" />
+        <path class="edge" id="talkbox-voice" d="M736 215 L882 215" />
+        <path class="edge direct" id="app-voice" d="M366 183 C520 34 725 34 882 150" />
+        <text class="edge-label" id="label-app-agent" x="247" y="295"></text><text class="edge-label" id="label-agent-app" x="247" y="295"></text>
+        <text class="edge-label" id="label-app-talkbox" x="380" y="198"></text><text class="edge-label" id="label-talkbox-app" x="380" y="267"></text>
+        <text class="edge-label" id="label-agent-talkbox" x="372" y="442"></text><text class="edge-label" id="label-talkbox-agent" x="372" y="507"></text>
+        <text class="edge-label" id="label-talkbox-voice" x="755" y="198"></text><text class="edge-label" id="label-app-voice" x="520" y="48"></text>
+      </svg>
+      <div class="legend"><span><i class="sample"></i> Control or context flow</span><span><i class="sample dashed"></i> Returned or optional path</span><span><i class="sample direct"></i> Direct browser-to-voice WebRTC</span></div>
+    </div></section>
+
+    <section class="detail"><article class="phase-detail" id="phase-detail" aria-live="polite"></article><aside class="principle"><h2>Boundary principle</h2><p><strong>Talkbox may manage conversation mechanics, but it must not invent task answers.</strong></p><p>Your agent owns truth, memory, reasoning, tools, actions, and durable history. Your renderer owns the live data channel and any silent writeback. Talkbox stays out of the live audio path.</p></aside></section>
+    <nav class="controls" aria-label="Architecture phases">
+      <button class="phase-button" data-phase="1" type="button" aria-pressed="true"><span class="phase-number">1</span><span><span class="phase-name">Voice connect</span><span class="phase-sub">Policy | setup | WebRTC</span></span></button>
+      <button class="phase-button" data-phase="2" type="button" aria-pressed="false"><span class="phase-number">2</span><span><span class="phase-name">Continuity setup</span><span class="phase-sub">Identity | context | history</span></span></button>
+      <button class="phase-button" data-phase="3" type="button" aria-pressed="false"><span class="phase-number">3</span><span><span class="phase-name">Live conversation</span><span class="phase-sub">ask_agent | truth | delivery</span></span></button>
+      <button class="phase-button" data-phase="4" type="button" aria-pressed="false"><span class="phase-number">4</span><span><span class="phase-name">Progress narration</span><span class="phase-sub">Activity | voice update | flow</span></span></button>
+      <div class="utility"><button class="primary" id="play" type="button">Pause</button><button id="restart" type="button">Restart</button></div>
+    </nav>
+  </main>
+
+  <script>
+    const phases = {
+      1: {
+        accent:'#176de4', soft:'#eaf3ff', kicker:'Phase 1 | Voice connect',
+        title:'Talkbox authors the voice session; your app then connects directly to the voice model.',
+        edges:['app-talkbox','talkbox-voice','app-voice'],
+        labels:{'app-talkbox':'session setup','talkbox-voice':'policy + connection','app-voice':'direct WebRTC after setup'},
+        bullets:[
+          'Your app creates the WebRTC peer, captures the microphone, and prepares the connection offer.',
+          'Talkbox combines voice policy, the <code>ask_agent</code> boundary, optional persona, and backend-supplied context into the live session.',
+          'OpenAI Realtime is the current live provider. The role is shown generically so the architecture stays centered on responsibilities.',
+          'After setup, your app and the voice model exchange live audio and events directly. Talkbox is not in the live audio path.'
+        ],
+        payoff:'Payoff: natural live voice mechanics without moving your agent\'s brain into the voice layer.'
+      },
+      2: {
+        accent:'#198653', soft:'#e9f7ef', kicker:'Phase 2 | Continuity setup',
+        title:'Stable identity and passive context make voice feel like the same conversation.',
+        edges:['talkbox-agent','agent-app','app-voice'],
+        labels:{'talkbox-agent':'context + identity','agent-app':'recent history','app-voice':'passive continuity'},
+        bullets:[
+          'Talkbox can request session-aware user, memory, and conversation context from the configured backend before the live session opens.',
+          'The bundled browser can add recent agent history to the voice session as passive context without asking the model to speak.',
+          'Talkbox forwards session identity and voice metadata. Your agent remains responsible for resolving the session and keeping histories separate.',
+          'The renderer or backend silently writes back local voice-only turns. The bundled browser may also greet the user by name once when a new connection opens.'
+        ],
+        payoff:'Scope: Talkbox supplies continuity hooks; durable storage and silent writeback stay with your product.'
+      },
+      3: {
+        accent:'#b66511', soft:'#fff2df', kicker:'Phase 3 | Live conversation',
+        title:'The voice model manages rapport; your agent supplies truth and performs the work.',
+        edges:['app-talkbox','agent-talkbox','talkbox-agent','talkbox-app','app-voice'],
+        labels:{'app-talkbox':'ask_agent request','agent-talkbox':'agent request','talkbox-agent':'authoritative answer','talkbox-app':'tool result','app-voice':'spoken delivery'},
+        bullets:[
+          'The voice model handles greetings, acknowledgments, timing, and questions fully grounded in injected context.',
+          'New information, current state, actions, tools, missing context, and uncertainty cross the <code>ask_agent</code> boundary.',
+          'Talkbox sends faithful text to your agent through the configured adapter. Your agent reasons, uses tools, and returns the authoritative answer.',
+          'Your app returns that answer to the voice model for natural delivery. Talkbox does not invent or replace task facts.'
+        ],
+        payoff:'Complementary objectives: the agent reasons across time while the voice model maintains rapport in the present.'
+      },
+      4: {
+        accent:'#6c4ab7', soft:'#f2edff', kicker:'Phase 4 | Progress narration',
+        title:'Useful agent activity becomes a natural voice update during a long wait.',
+        edges:['agent-app','app-talkbox','talkbox-app','app-voice'],
+        labels:{'agent-app':'meaningful activity','app-talkbox':'progress context','talkbox-app':'narration policy','app-voice':'short voice update'},
+        bullets:[
+          'Your renderer chooses meaningful activity while an agent request is still in flight and skips noisy or repetitive events.',
+          'Talkbox converts that activity into calm, speech-friendly narration policy rather than exposing internal mechanics.',
+          'Your app forwards the instruction to the voice model, which performs one concise update while the agent continues working.',
+          'The final task answer still comes only from your agent through <code>ask_agent</code>.'
+        ],
+        payoff:'Perceived-latency payoff: a long backend wait feels like a continuing conversation instead of dead air.'
+      }
+    };
+
+    const phaseButtons=[...document.querySelectorAll('[data-phase]')];
+    const nodes=[...document.querySelectorAll('[data-node]')];
+    const edges=[...document.querySelectorAll('.edge')];
+    const labels=[...document.querySelectorAll('.edge-label')];
+    const detail=document.getElementById('phase-detail');
+    const play=document.getElementById('play');
+    const restart=document.getElementById('restart');
+    let current=1, playing=true, timer;
+
+    function renderPhase(id) {
+      current=id;
+      const phase=phases[id];
+      document.documentElement.style.setProperty('--accent',phase.accent);
+      document.documentElement.style.setProperty('--accent-soft',phase.soft);
+      phaseButtons.forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.phase)===id)));
+      nodes.forEach(node=>{node.classList.add('active');node.classList.remove('dim');});
+      edges.forEach(edge=>edge.classList.toggle('active',phase.edges.includes(edge.id)));
+      labels.forEach(label=>{const text=phase.labels[label.id]||'';label.textContent=text;label.classList.toggle('active',Boolean(text));});
+      detail.innerHTML=`<p class="kicker">${phase.kicker}</p><h2>${phase.title}</h2><ul>${phase.bullets.map(item=>`<li>${item}</li>`).join('')}</ul><p class="payoff"><strong>${id===4?'Perceived latency':'Why it matters'}:</strong> ${phase.payoff.replace(/^[^:]+:\s*/, '')}</p>`;
+    }
+
+    function schedule(){window.clearInterval(timer);if(playing)timer=window.setInterval(()=>renderPhase(current===4?1:current+1),8000);}
+    phaseButtons.forEach(button=>button.addEventListener('click',()=>{renderPhase(Number(button.dataset.phase));schedule();}));
+    play.addEventListener('click',()=>{playing=!playing;play.textContent=playing?'Pause':'Play';play.classList.toggle('primary',playing);schedule();});
+    restart.addEventListener('click',()=>{playing=true;play.textContent='Pause';play.classList.add('primary');renderPhase(1);schedule();});
+    renderPhase(1);
+    schedule();
+  </script>
+</body>
+</html>
