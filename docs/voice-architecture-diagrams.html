@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Three voice architecture patterns and where the user's agent sits in each one.">
+  <title>The Voice AI Landscape</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172333;
+      --muted: #5e7083;
+      --accent: #176de4;
+      --accent-soft: #eaf3ff;
+      --line: #b9c8d8;
+      --panel-border: #d3deea;
+      --agent: #bc6912;
+      --agent-dark: #814804;
+      --agent-soft: #fff4e4;
+      --voice: #178654;
+      --voice-dark: #12623a;
+      --voice-soft: #eaf8f1;
+      --unified: #6c4ab7;
+      --unified-dark: #5d3da4;
+      --unified-soft: #f3effc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: #f4f7fa;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #f4f7fa;
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page {
+      width: min(1280px, calc(100% - 40px));
+      margin: 24px auto 48px;
+      overflow: hidden;
+      border: 1px solid #8dafe4;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 18px 44px rgba(25, 48, 78, 0.12);
+    }
+
+    .chrome {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 34px;
+      padding: 0 16px;
+      color: #fff;
+      background: #121c3c;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .lights {
+      display: flex;
+      gap: 5px;
+    }
+
+    .lights i {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #ee5e54;
+    }
+
+    .lights i:nth-child(2) {
+      background: #dfb13f;
+    }
+
+    .lights i:nth-child(3) {
+      background: #4fc575;
+    }
+
+    .intro {
+      padding: 32px 44px 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 46px);
+      line-height: 1.05;
+      letter-spacing: -0.035em;
+    }
+
+    .lede {
+      max-width: 920px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .reading-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin: 18px 0 0;
+      padding: 8px 11px;
+      border-left: 3px solid var(--agent);
+      border-radius: 4px;
+      color: #5d4a34;
+      background: var(--agent-soft);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .reading-key .key-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      background: var(--agent);
+      box-shadow: 0 0 0 3px rgba(188, 105, 18, 0.13);
+    }
+
+    .diagrams {
+      display: grid;
+      gap: 22px;
+      padding: 0 28px 30px;
+    }
+
+    .panel {
+      overflow: hidden;
+      border: 1px solid var(--panel-border);
+      border-radius: 9px;
+      background: #fff;
+      box-shadow: 0 6px 18px rgba(31, 53, 75, 0.06);
+    }
+
+    .panel-head {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 13px;
+      align-items: start;
+      padding: 20px 22px 17px;
+      border-bottom: 1px solid var(--panel-border);
+      background: #fbfcfe;
+    }
+
+    .number {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--accent);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+
+    .caption {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-style: italic;
+    }
+
+    .stage {
+      padding: 30px 24px;
+      background-color: #fbfcfe;
+      background-image: radial-gradient(#d6e0ea 1px, transparent 1px);
+      background-size: 18px 18px;
+    }
+
+    .flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 180px;
+    }
+
+    .endpoint {
+      display: grid;
+      flex: 0 0 54px;
+      width: 54px;
+      height: 54px;
+      place-items: center;
+      border: 1px solid #c8d4df;
+      border-radius: 50%;
+      color: #405a75;
+      background: #fff;
+      box-shadow: 0 4px 10px rgba(27, 48, 69, 0.08);
+    }
+
+    .endpoint svg {
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .node {
+      display: grid;
+      min-height: 112px;
+      align-content: center;
+      padding: 17px 18px;
+      border: 1px solid #bdcad8;
+      border-radius: 8px;
+      background: #fff;
+      text-align: center;
+      box-shadow: 0 5px 13px rgba(26, 48, 70, 0.08);
+    }
+
+    .node .label {
+      font-size: 16px;
+      font-weight: 850;
+      line-height: 1.15;
+    }
+
+    .node .detail {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .service-node {
+      width: 170px;
+      border-color: #9dbce5;
+      color: #173f82;
+      background: #f7fbff;
+    }
+
+    .agent-node {
+      width: 190px;
+      border: 2px solid var(--agent);
+      color: var(--agent-dark);
+      background: #fffaf3;
+      box-shadow: 0 8px 18px rgba(129, 72, 4, 0.13);
+    }
+
+    .agent-node .detail {
+      color: #755a36;
+    }
+
+    .seam {
+      display: grid;
+      flex: 0 1 108px;
+      min-width: 68px;
+      grid-template-rows: auto 18px;
+      align-items: end;
+      padding: 0 9px;
+      color: #3c6087;
+      text-align: center;
+    }
+
+    .seam-label {
+      align-self: end;
+      padding-bottom: 7px;
+      font-size: 11px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .arrow-line {
+      position: relative;
+      align-self: start;
+      height: 2px;
+      background: var(--line);
+    }
+
+    .arrow-line::after {
+      position: absolute;
+      top: 50%;
+      right: -1px;
+      width: 0;
+      height: 0;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      border-left: 6px solid var(--line);
+      content: "";
+      transform: translateY(-50%);
+    }
+
+    .plain-seam {
+      flex-basis: 76px;
+      min-width: 46px;
+    }
+
+    .plain-seam .seam-label {
+      visibility: hidden;
+    }
+
+    .cascade .flow {
+      gap: 0;
+    }
+
+    .model-shell {
+      width: min(100%, 1020px);
+      margin: 0 auto;
+      padding: 18px 20px 23px;
+      border: 2px solid var(--unified);
+      border-radius: 12px;
+      background: rgba(243, 239, 252, 0.93);
+      box-shadow: 0 8px 20px rgba(93, 61, 164, 0.1);
+    }
+
+    .shell-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      color: var(--unified-dark);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .shell-head::before {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--unified);
+      box-shadow: 0 0 0 4px rgba(108, 74, 183, 0.13);
+      content: "";
+    }
+
+    .hume-stage {
+      padding-top: 24px;
+      padding-bottom: 24px;
+    }
+
+    .hume-stage .flow {
+      min-height: 146px;
+    }
+
+    .hume-node {
+      width: 175px;
+      border-color: var(--unified);
+      color: var(--unified-dark);
+      background: #fff;
+    }
+
+    .hume-stage .seam {
+      color: var(--unified-dark);
+    }
+
+    .hume-stage .arrow-line {
+      background: #9c87cf;
+    }
+
+    .hume-stage .arrow-line::after {
+      border-left-color: #9c87cf;
+    }
+
+    .external-tag {
+      display: inline-block;
+      justify-self: center;
+      margin-bottom: 7px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: var(--agent-dark);
+      background: #ffe9c9;
+      font-size: 9px;
+      font-weight: 850;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .s2s-stage {
+      padding-top: 32px;
+      padding-bottom: 28px;
+    }
+
+    .s2s-layout {
+      display: grid;
+      width: min(100%, 880px);
+      margin: 0 auto;
+      grid-template-columns: 1fr;
+    }
+
+    .s2s-main {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 142px;
+    }
+
+    .realtime-node {
+      width: 310px;
+      min-height: 130px;
+      border: 2px solid var(--voice);
+      color: var(--voice-dark);
+      background: var(--voice-soft);
+      box-shadow: 0 8px 20px rgba(18, 98, 58, 0.12);
+    }
+
+    .audio-loop {
+      display: block;
+      margin-top: 12px;
+      padding: 6px 9px;
+      border: 1px solid #9bcfb6;
+      border-radius: 999px;
+      color: var(--voice-dark);
+      background: #fff;
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .s2s-main .seam {
+      color: var(--voice-dark);
+    }
+
+    .s2s-main .arrow-line {
+      background: #76b999;
+    }
+
+    .s2s-main .arrow-line::after {
+      border-left-color: #76b999;
+    }
+
+    .optional {
+      display: grid;
+      width: 310px;
+      justify-self: center;
+      grid-template-columns: 1fr;
+      justify-items: center;
+      opacity: 0.68;
+    }
+
+    .optional-line {
+      width: 0;
+      height: 34px;
+      border-left: 2px dashed #a99577;
+    }
+
+    .optional-label {
+      margin: 2px 0 8px;
+      color: #7b6a55;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .optional .agent-node {
+      width: 170px;
+      min-height: 82px;
+      padding: 12px 14px;
+      border-width: 1px;
+      border-style: dashed;
+      box-shadow: none;
+    }
+
+    .optional .agent-node .label {
+      font-size: 14px;
+    }
+
+    @media (max-width: 1080px) {
+      .page {
+        width: min(100% - 20px, 720px);
+        margin-top: 12px;
+      }
+
+      .intro {
+        padding: 25px 22px 20px;
+      }
+
+      .diagrams {
+        padding: 0 12px 18px;
+      }
+
+      .panel-head {
+        padding: 18px;
+      }
+
+      .stage {
+        padding: 25px 18px 28px;
+        background-size: 16px 16px;
+      }
+
+      .flow,
+      .s2s-main {
+        flex-direction: column;
+      }
+
+      .node,
+      .service-node,
+      .agent-node,
+      .hume-node,
+      .realtime-node {
+        width: min(100%, 330px);
+      }
+
+      .endpoint {
+        flex-basis: 50px;
+        width: 50px;
+        height: 50px;
+      }
+
+      .seam,
+      .plain-seam {
+        flex: 0 0 76px;
+        width: 120px;
+        min-width: 0;
+        grid-template: 1fr / 1fr 20px;
+        align-items: center;
+        padding: 7px 0;
+      }
+
+      .seam-label {
+        align-self: center;
+        padding: 0 10px 0 0;
+        text-align: right;
+        white-space: normal;
+      }
+
+      .arrow-line {
+        align-self: stretch;
+        width: 2px;
+        height: auto;
+        justify-self: center;
+        background: var(--line);
+      }
+
+      .arrow-line::after {
+        top: auto;
+        right: auto;
+        bottom: -1px;
+        left: 50%;
+        border-top: 6px solid var(--line);
+        border-right: 4px solid transparent;
+        border-bottom: 0;
+        border-left: 4px solid transparent;
+        transform: translateX(-50%);
+      }
+
+      .hume-stage .arrow-line::after {
+        border-top-color: #9c87cf;
+        border-left-color: transparent;
+      }
+
+      .s2s-main .arrow-line::after {
+        border-top-color: #76b999;
+        border-left-color: transparent;
+      }
+
+      .model-shell {
+        padding: 16px 14px 22px;
+      }
+
+      .shell-head {
+        justify-content: center;
+        margin-bottom: 18px;
+        text-align: center;
+      }
+
+      .optional {
+        width: min(100%, 330px);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page {
+        width: calc(100% - 12px);
+        margin: 6px auto 22px;
+        border-radius: 8px;
+      }
+
+      .intro {
+        padding: 22px 17px 18px;
+      }
+
+      .diagrams {
+        gap: 14px;
+        padding: 0 7px 12px;
+      }
+
+      .panel-head {
+        grid-template-columns: 1fr;
+        gap: 9px;
+        padding: 16px;
+      }
+
+      .stage {
+        padding: 22px 12px 25px;
+      }
+
+      .reading-key {
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="chrome">
+      <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+      Voice Architecture Patterns
+    </header>
+
+    <section class="intro">
+      <p class="eyebrow">The Voice AI Landscape</p>
+      <h1>Where does your agent sit?</h1>
+      <p class="lede">Three architectures can all produce a voice assistant. The difference is what travels through the middle, and whether your agent remains the brain.</p>
+      <p class="reading-key"><span class="key-dot" aria-hidden="true"></span>Track the orange box. It is always your agent.</p>
+    </section>
+
+    <section class="diagrams" aria-label="Three voice architecture diagrams">
+      <article class="panel cascade">
+        <header class="panel-head">
+          <span class="number">1</span>
+          <div>
+            <h2>Cascade Sandwich</h2>
+            <p class="caption">Three strangers. Your agent is the brain. You own every seam.</p>
+          </div>
+        </header>
+        <div class="stage">
+          <div class="flow" aria-label="Microphone to Deepgram speech to text, then text to your agent, then text to Piper text to speech, then speaker">
+            <div class="endpoint" aria-label="Microphone">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>
+            </div>
+            <div class="seam plain-seam"><span class="seam-label">signal</span><span class="arrow-line"></span></div>
+            <div class="node service-node">
+              <span class="label">STT: Deepgram</span>
+              <span class="detail">Speech becomes text</span>
+            </div>
+            <div class="seam"><span class="seam-label">text</span><span class="arrow-line"></span></div>
+            <div class="node agent-node">
+              <span class="label">YOUR AGENT</span>
+              <span class="detail">The brain</span>
+            </div>
+            <div class="seam"><span class="seam-label">text</span><span class="arrow-line"></span></div>
+            <div class="node service-node">
+              <span class="label">TTS: Piper</span>
+              <span class="detail">Text becomes speech</span>
+            </div>
+            <div class="seam plain-seam"><span class="seam-label">signal</span><span class="arrow-line"></span></div>
+            <div class="endpoint" aria-label="Speaker">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head">
+          <span class="number">2</span>
+          <div>
+            <h2>Speech-Language Model</h2>
+            <p class="caption">One unified model wraps your agent. The middle is still text.</p>
+          </div>
+        </header>
+        <div class="stage hume-stage">
+          <section class="model-shell" aria-label="Hume EVI one model wraps both sides of the interaction">
+            <div class="shell-head">Hume EVI: one model</div>
+            <div class="flow">
+              <div class="endpoint" aria-label="Microphone">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>
+              </div>
+              <div class="seam plain-seam"><span class="seam-label">signal</span><span class="arrow-line"></span></div>
+              <div class="node hume-node">
+                <span class="label">Hears + scores emotion</span>
+                <span class="detail">Speech and expression</span>
+              </div>
+              <div class="seam"><span class="seam-label">text + emotion</span><span class="arrow-line"></span></div>
+              <div class="node agent-node">
+                <span class="external-tag">External, yours</span>
+                <span class="label">YOUR AGENT</span>
+                <span class="detail">The brain</span>
+              </div>
+              <div class="seam"><span class="seam-label">text</span><span class="arrow-line"></span></div>
+              <div class="node hume-node">
+                <span class="label">Re-voices</span>
+                <span class="detail">Same model, other side</span>
+              </div>
+              <div class="seam plain-seam"><span class="seam-label">signal</span><span class="arrow-line"></span></div>
+              <div class="endpoint" aria-label="Speaker">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>
+              </div>
+            </div>
+          </section>
+        </div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head">
+          <span class="number">3</span>
+          <div>
+            <h2>Speech-to-Speech</h2>
+            <p class="caption">One mind, in audio. No text in the middle.</p>
+          </div>
+        </header>
+        <div class="stage s2s-stage">
+          <div class="s2s-layout">
+            <div class="s2s-main" aria-label="Microphone audio flows through OpenAI Realtime directly to speaker">
+              <div class="endpoint" aria-label="Microphone">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>
+              </div>
+              <div class="seam plain-seam"><span class="seam-label">signal</span><span class="arrow-line"></span></div>
+              <div class="node realtime-node">
+                <span class="label">OpenAI Realtime</span>
+                <span class="audio-loop">audio never becomes text</span>
+              </div>
+              <div class="seam plain-seam"><span class="seam-label">signal</span><span class="arrow-line"></span></div>
+              <div class="endpoint" aria-label="Speaker">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>
+              </div>
+            </div>
+            <div class="optional">
+              <span class="optional-line" aria-hidden="true"></span>
+              <span class="optional-label">optional tool call</span>
+              <div class="node agent-node">
+                <span class="label">YOUR AGENT</span>
+                <span class="detail">External brain, if needed</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
