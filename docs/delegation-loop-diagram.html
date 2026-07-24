@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The end-to-end delegation loop for an orchestrator agent working with a swappable coding executor.">
+  <title>The Delegation Loop</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172333;
+      --muted: #5e7083;
+      --accent: #176de4;
+      --accent-soft: #eaf3ff;
+      --line: #9babbc;
+      --panel-border: #d3deea;
+      --cal: #bc6912;
+      --cal-dark: #814804;
+      --cal-soft: #fff4e4;
+      --codex: #6c4ab7;
+      --codex-dark: #53358e;
+      --codex-soft: #f3effc;
+      --working: #d89a20;
+      --working-soft: #fff7dc;
+      --attention: #176de4;
+      --attention-soft: #eaf3ff;
+      --ready: #178654;
+      --ready-soft: #eaf8f1;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: #f4f7fa;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #f4f7fa;
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page {
+      width: min(1360px, calc(100% - 40px));
+      margin: 24px auto 48px;
+      overflow: hidden;
+      border: 1px solid #8dafe4;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 18px 44px rgba(25, 48, 78, 0.12);
+    }
+
+    .chrome {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 34px;
+      padding: 0 16px;
+      color: #fff;
+      background: #121c3c;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .lights {
+      display: flex;
+      gap: 5px;
+    }
+
+    .lights i {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #ee5e54;
+    }
+
+    .lights i:nth-child(2) {
+      background: #dfb13f;
+    }
+
+    .lights i:nth-child(3) {
+      background: #4fc575;
+    }
+
+    .intro {
+      padding: 32px 44px 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 46px);
+      line-height: 1.05;
+      letter-spacing: -0.035em;
+    }
+
+    .lede {
+      max-width: 960px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .thesis {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      margin: 18px 0 0;
+      padding: 11px 13px;
+      border-left: 3px solid var(--cal);
+      border-radius: 4px;
+      color: #5d4a34;
+      background: var(--cal-soft);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .thesis strong {
+      color: var(--cal-dark);
+    }
+
+    .diagram-wrap {
+      padding: 0 28px 30px;
+    }
+
+    .stage {
+      position: relative;
+      height: 720px;
+      overflow: hidden;
+      border: 1px solid var(--panel-border);
+      border-radius: 9px;
+      background-color: #fbfcfe;
+      background-image: radial-gradient(#d6e0ea 1px, transparent 1px);
+      background-size: 18px 18px;
+    }
+
+    .stage-title {
+      position: absolute;
+      z-index: 3;
+      top: 20px;
+      left: 24px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #405a75;
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .stage-title::before {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(23, 109, 228, 0.12);
+      content: "";
+    }
+
+    .card {
+      position: absolute;
+      z-index: 2;
+      padding: 14px 15px;
+      border: 1px solid #bdcad8;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 6px 16px rgba(26, 48, 70, 0.08);
+    }
+
+    .card h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.16;
+    }
+
+    .dot {
+      flex: none;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(23, 109, 228, 0.12);
+    }
+
+    .step {
+      position: absolute;
+      top: -10px;
+      right: -8px;
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      color: #fff;
+      background: #45627e;
+      font-size: 10px;
+      font-weight: 850;
+      box-shadow: 0 3px 8px rgba(23, 35, 51, 0.16);
+    }
+
+    .sub {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .list {
+      margin: 9px 0 0;
+      padding-left: 16px;
+      color: #405267;
+      font-size: 11px;
+    }
+
+    .list li + li {
+      margin-top: 4px;
+    }
+
+    .person {
+      top: 84px;
+      left: 3%;
+      width: 14%;
+      min-height: 128px;
+    }
+
+    .cal {
+      top: 72px;
+      left: 20%;
+      width: 18%;
+      min-height: 154px;
+      border: 2px solid var(--cal);
+      background: #fffaf3;
+    }
+
+    .cal h2,
+    .analysis h2 {
+      color: var(--cal-dark);
+    }
+
+    .cal .dot,
+    .analysis .dot {
+      background: var(--cal);
+      box-shadow: 0 0 0 4px rgba(188, 105, 18, 0.12);
+    }
+
+    .codex {
+      top: 72px;
+      left: 42%;
+      width: 18%;
+      min-height: 154px;
+      border: 2px solid var(--codex);
+      background: #fbf9ff;
+    }
+
+    .codex h2 {
+      color: var(--codex-dark);
+    }
+
+    .codex .dot {
+      background: var(--codex);
+      box-shadow: 0 0 0 4px rgba(108, 74, 183, 0.12);
+    }
+
+    .working {
+      top: 84px;
+      left: 64%;
+      width: 15%;
+      min-height: 128px;
+      border: 2px solid var(--working);
+      background: var(--working-soft);
+    }
+
+    .working h2 {
+      color: #8b5b00;
+    }
+
+    .working .dot {
+      background: var(--working);
+      box-shadow: 0 0 0 4px rgba(216, 154, 32, 0.14);
+    }
+
+    .analysis {
+      top: 72px;
+      left: 82%;
+      width: 15%;
+      min-height: 154px;
+      border: 2px solid var(--cal);
+      background: #fffaf3;
+    }
+
+    .decision {
+      position: absolute;
+      z-index: 2;
+      top: 274px;
+      left: 83.4%;
+      display: grid;
+      width: 130px;
+      height: 96px;
+      place-items: center;
+      padding: 18px;
+      border: 2px solid #46637f;
+      border-radius: 22px;
+      color: #2c435a;
+      background: #fff;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 850;
+      box-shadow: 0 6px 16px rgba(26, 48, 70, 0.08);
+    }
+
+    .branch-tag {
+      position: absolute;
+      z-index: 3;
+      padding: 3px 7px;
+      border-radius: 999px;
+      font-size: 9px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .branch-no {
+      top: 315px;
+      left: 72.2%;
+      color: #106440;
+      background: #def2e7;
+    }
+
+    .branch-yes {
+      top: 386px;
+      left: 89.2%;
+      color: #1256ad;
+      background: #dcecff;
+    }
+
+    .ready {
+      top: 376px;
+      left: 62%;
+      width: 18%;
+      min-height: 142px;
+      border: 2px solid var(--ready);
+      background: var(--ready-soft);
+    }
+
+    .ready h2 {
+      color: #12623a;
+    }
+
+    .ready .dot {
+      background: var(--ready);
+      box-shadow: 0 0 0 4px rgba(23, 134, 84, 0.13);
+    }
+
+    .pending {
+      top: 407px;
+      left: 82%;
+      width: 15%;
+      min-height: 154px;
+      border: 2px solid var(--attention);
+      background: var(--attention-soft);
+    }
+
+    .pending h2 {
+      color: #1256ad;
+    }
+
+    .pending .dot {
+      background: var(--attention);
+    }
+
+    .mode {
+      top: 574px;
+      left: 71%;
+      width: 26%;
+      min-height: 112px;
+      padding: 13px;
+      border-color: #9eb4ca;
+      background: #fff;
+    }
+
+    .mode h2 {
+      color: #334e68;
+      font-size: 14px;
+    }
+
+    .mode-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 9px;
+    }
+
+    .mode-option {
+      padding: 7px 8px;
+      border: 1px solid #cbd7e2;
+      border-radius: 6px;
+      color: #4d6175;
+      background: #f8fafc;
+      font-size: 10px;
+    }
+
+    .mode-option strong {
+      display: block;
+      color: #27445f;
+      font-size: 11px;
+    }
+
+    .summary {
+      top: 574px;
+      left: 37%;
+      width: 23%;
+      min-height: 104px;
+      border: 2px solid var(--ready);
+      background: #fff;
+    }
+
+    .summary h2 {
+      color: #12623a;
+    }
+
+    .summary .dot {
+      background: var(--ready);
+    }
+
+    .wires {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .wire {
+      fill: none;
+      stroke: #8193a6;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      marker-end: url(#arrow-neutral);
+    }
+
+    .wire-green {
+      stroke: var(--ready);
+      marker-end: url(#arrow-green);
+    }
+
+    .wire-blue {
+      stroke: var(--attention);
+      marker-end: url(#arrow-blue);
+    }
+
+    .wire-purple {
+      stroke: var(--codex);
+      stroke-dasharray: 7 6;
+      marker-end: url(#arrow-purple);
+    }
+
+    .wire-label {
+      fill: #52687d;
+      font-size: 10px;
+      font-weight: 800;
+      paint-order: stroke;
+      stroke: #fbfcfe;
+      stroke-width: 5px;
+      stroke-linejoin: round;
+    }
+
+    .wire-label.green {
+      fill: #12623a;
+    }
+
+    .wire-label.blue {
+      fill: #1256ad;
+    }
+
+    .wire-label.purple {
+      fill: var(--codex-dark);
+    }
+
+    .state-key {
+      position: absolute;
+      z-index: 3;
+      left: 24px;
+      bottom: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      max-width: 390px;
+      padding: 10px 12px;
+      border: 1px solid #d4dee8;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 4px 12px rgba(31, 53, 75, 0.05);
+    }
+
+    .state-key strong {
+      width: 100%;
+      color: #405a75;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .state {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: #53677b;
+      font-size: 10px;
+      font-weight: 750;
+    }
+
+    .state i {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--state-color);
+    }
+
+    .footer-note {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+      gap: 16px;
+      padding: 0 28px 26px;
+    }
+
+    .note {
+      padding: 16px 18px;
+      border: 1px solid #d7e1eb;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(32, 54, 76, 0.04);
+    }
+
+    .note h2 {
+      margin: 0 0 7px;
+      font-size: 14px;
+    }
+
+    .note p {
+      margin: 0;
+      color: #56697d;
+      font-size: 12px;
+    }
+
+    .principle {
+      border-left: 4px solid var(--cal);
+    }
+
+    .principle h2 {
+      color: var(--cal-dark);
+    }
+
+    .swap {
+      border-left: 4px solid var(--codex);
+    }
+
+    .swap h2 {
+      color: var(--codex-dark);
+    }
+
+    @media (max-width: 980px) {
+      .page {
+        width: min(100% - 20px, 760px);
+        margin-top: 12px;
+      }
+
+      .intro {
+        padding: 24px 20px 20px;
+      }
+
+      .diagram-wrap {
+        padding: 0 10px 18px;
+      }
+
+      .stage {
+        height: auto;
+        padding: 58px 14px 18px;
+        overflow: visible;
+        background-image: none;
+      }
+
+      .stage-title {
+        top: 20px;
+        left: 20px;
+      }
+
+      .card,
+      .decision {
+        position: relative;
+        inset: auto;
+        width: 100%;
+        min-height: 0;
+        margin: 0 0 30px;
+      }
+
+      .card:not(.mode):not(.summary)::after,
+      .decision::after {
+        position: absolute;
+        bottom: -25px;
+        left: 50%;
+        width: 2px;
+        height: 20px;
+        background: #9aabba;
+        content: "";
+      }
+
+      .card:not(.mode):not(.summary)::before,
+      .decision::before {
+        position: absolute;
+        bottom: -27px;
+        left: calc(50% - 4px);
+        border-top: 6px solid #9aabba;
+        border-right: 4px solid transparent;
+        border-left: 4px solid transparent;
+        content: "";
+      }
+
+      .ready::after,
+      .ready::before {
+        display: none;
+      }
+
+      .ready {
+        order: 1;
+      }
+
+      .pending {
+        order: 2;
+      }
+
+      .mode {
+        order: 3;
+      }
+
+      .summary {
+        order: 4;
+        margin-bottom: 16px;
+      }
+
+      .branch-tag {
+        position: relative;
+        inset: auto;
+        display: inline-flex;
+        margin: -8px 0 10px 4px;
+      }
+
+      .branch-no {
+        margin-top: -8px;
+      }
+
+      .branch-yes {
+        margin-top: -8px;
+      }
+
+      .wires {
+        display: none;
+      }
+
+      .mode-options {
+        grid-template-columns: 1fr;
+      }
+
+      .state-key {
+        position: relative;
+        inset: auto;
+        max-width: none;
+        margin-top: 4px;
+      }
+
+      .footer-note {
+        grid-template-columns: 1fr;
+        padding: 0 10px 20px;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .page {
+        width: 100%;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+      }
+
+      .intro {
+        padding-inline: 16px;
+      }
+
+      .lede {
+        font-size: 14px;
+      }
+
+      .thesis {
+        display: grid;
+      }
+
+      .diagram-wrap {
+        padding-inline: 8px;
+      }
+
+      .stage {
+        padding-inline: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="chrome">
+      <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+      Cal Delegation Loop
+    </header>
+
+    <section class="intro">
+      <p class="eyebrow">Agent-to-agent orchestration</p>
+      <h1>Delegate without babysitting.</h1>
+      <p class="lede">Cal keeps the context, continuity, and decision loop. Codex works as a focused executor in its own thread. Questions return through the same visible Strand, then the work resumes where it stopped.</p>
+      <div class="thesis">
+        <span><strong>Cal owns the brain:</strong> context, memory, orchestration, and continuity.</span>
+        <span><strong>Codex owns the run:</strong> focused execution inside a swappable worker thread.</span>
+      </div>
+    </section>
+
+    <section class="diagram-wrap">
+      <div class="stage" aria-label="Static diagram of Cal orchestrating a Codex delegation loop">
+        <div class="stage-title">One task, one visible Strand, one continuous executor thread</div>
+
+        <article class="card person">
+          <span class="step">1</span>
+          <h2><span class="dot"></span>Monika</h2>
+          <p class="sub">Gives Cal a task in natural language.</p>
+        </article>
+
+        <article class="card cal">
+          <span class="step">2</span>
+          <h2><span class="dot"></span>Cal orchestrates</h2>
+          <ul class="list">
+            <li>Prepares the relevant context</li>
+            <li>Writes the task note</li>
+            <li>Delegates the run</li>
+          </ul>
+        </article>
+
+        <article class="card codex">
+          <span class="step">3</span>
+          <h2><span class="dot"></span>Codex executes</h2>
+          <p class="sub">Works in its own durable thread.</p>
+          <ul class="list">
+            <li>Reads, builds, tests, and reports</li>
+            <li>Can be resumed after feedback</li>
+          </ul>
+        </article>
+
+        <article class="card working">
+          <span class="step">4</span>
+          <h2><span class="dot"></span>Codex Strand</h2>
+          <p class="sub"><strong>Working</strong> · Task sent</p>
+          <p class="sub">Monika can watch the delegated run from Cal.</p>
+        </article>
+
+        <article class="card analysis">
+          <span class="step">5</span>
+          <h2><span class="dot"></span>Cal analyzes</h2>
+          <p class="sub">Reads the full Codex response, not a truncated preview.</p>
+        </article>
+
+        <div class="decision">Open questions?</div>
+        <span class="branch-tag branch-no">No</span>
+
+        <article class="card ready">
+          <h2><span class="dot"></span>Task completed</h2>
+          <p class="sub"><strong>Ready</strong> · Green Strand</p>
+          <p class="sub">Cal closes the execution loop and prepares the result.</p>
+        </article>
+
+        <span class="branch-tag branch-yes">Yes</span>
+
+        <article class="card pending">
+          <h2><span class="dot"></span>Pending feedback</h2>
+          <p class="sub"><strong>Attention</strong> · Blue Strand</p>
+          <ul class="list">
+            <li>Cal drafts answers</li>
+            <li>Cal notifies Monika</li>
+          </ul>
+        </article>
+
+        <article class="card mode">
+          <h2>Feedback policy</h2>
+          <div class="mode-options">
+            <div class="mode-option"><strong>/ask-me</strong>Default. Wait for Monika's approval.</div>
+            <div class="mode-option"><strong>/dont-ask-me</strong>Answer autonomously, capped at 3 cycles.</div>
+          </div>
+        </article>
+
+        <article class="card summary">
+          <h2><span class="dot"></span>Summary to Monika</h2>
+          <p class="sub">The same Strand holds the task, feedback exchange, resumed work, and final result.</p>
+        </article>
+
+        <svg class="wires" viewBox="0 0 1200 720" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <marker id="arrow-neutral" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+              <path d="M0,0 L5,2.5 L0,5 z" fill="#8193a6"></path>
+            </marker>
+            <marker id="arrow-green" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+              <path d="M0,0 L5,2.5 L0,5 z" fill="#178654"></path>
+            </marker>
+            <marker id="arrow-blue" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+              <path d="M0,0 L5,2.5 L0,5 z" fill="#176de4"></path>
+            </marker>
+            <marker id="arrow-purple" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+              <path d="M0,0 L5,2.5 L0,5 z" fill="#6c4ab7"></path>
+            </marker>
+          </defs>
+
+          <path class="wire" d="M204 148 L240 148"></path>
+          <path class="wire" d="M456 148 L504 148"></path>
+          <path class="wire" d="M720 148 L768 148"></path>
+          <path class="wire" d="M948 148 L984 148"></path>
+          <path class="wire" d="M1080 226 L1080 274"></path>
+
+          <path class="wire wire-green" d="M1002 322 C942 322 935 442 960 442"></path>
+          <path class="wire wire-green" d="M744 446 C690 446 690 625 720 625"></path>
+          <path class="wire wire-green" d="M444 626 C312 626 142 552 122 214"></path>
+
+          <path class="wire wire-blue" d="M1080 370 L1080 407"></path>
+          <path class="wire wire-blue" d="M1080 561 L1080 574"></path>
+          <path class="wire wire-purple" d="M852 630 C706 704 566 704 564 228"></path>
+
+          <text class="wire-label" x="214" y="135">task</text>
+          <text class="wire-label" x="462" y="135">delegate</text>
+          <text class="wire-label" x="730" y="135">view</text>
+          <text class="wire-label" x="960" y="135">reply</text>
+          <text class="wire-label green" x="827" y="337">complete</text>
+          <text class="wire-label green" x="531" y="461">close loop</text>
+          <text class="wire-label blue" x="975" y="393">draft + notify</text>
+          <text class="wire-label purple" x="650" y="696">resume same thread</text>
+        </svg>
+
+        <aside class="state-key" aria-label="Codex Strand state key">
+          <strong>Codex Strand states</strong>
+          <span class="state" style="--state-color: var(--working)"><i></i>Working · yellow</span>
+          <span class="state" style="--state-color: var(--attention)"><i></i>Pending feedback · blue</span>
+          <span class="state" style="--state-color: var(--ready)"><i></i>Ready · green</span>
+        </aside>
+      </div>
+    </section>
+
+    <section class="footer-note">
+      <article class="note principle">
+        <h2>The loop is the product</h2>
+        <p>Delegation is not complete when another model returns text. It is complete when questions are recognized, answers are prepared, attention is requested only when needed, and execution can continue in the same thread.</p>
+      </article>
+      <article class="note swap">
+        <h2>The executor is swappable</h2>
+        <p>Codex is the executor shown here. Cal remains the brain and orchestrator, so another capable worker can occupy the same boundary without changing who owns context and continuity.</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
